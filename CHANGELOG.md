@@ -1,3 +1,9 @@
+## [0.1.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.0.0...v0.1.0) (2026-05-30)
+
+### 🚀 Features
+
+* added initial Zammad MCP server implementation ([202d34a](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/202d34acbb4ea05578daddf5fa96873a6d022565))
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
