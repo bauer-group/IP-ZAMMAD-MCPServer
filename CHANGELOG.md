@@ -1,3 +1,9 @@
+## [0.1.1](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.0...v0.1.1) (2026-05-30)
+
+### 🐛 Bug Fixes
+
+* corrected GHCR image path to match repo name ([0972df5](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/0972df52ed6862e4cfbc7cdc23661e3ced42d86e))
+
 ## [0.1.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.0.0...v0.1.0) (2026-05-30)
 
 ### 🚀 Features
