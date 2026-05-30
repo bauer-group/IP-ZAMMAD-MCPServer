@@ -42,7 +42,7 @@ dependencies = [
 
     # Structured logging + pretty dev console.
     "structlog>=24.4.0,<26.0.0",
-    "rich>=13.7.0,<15.0.0",
+    "rich>=13.7.0,<16.0.0",
 
     # OAuth client-state storage. DiskStore needs the [disk] extra,
     # RedisStore needs the [redis] extra. We request both explicitly because
