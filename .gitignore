@@ -1,0 +1,78 @@
+# =============================================================================
+# Zammad MCP Server — .gitignore
+# =============================================================================
+
+# Environment files (never commit secrets)
+.env
+.env.local
+.env.*.local
+.env.bak
+.env.production-local
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.installed.cfg
+*.egg
+.eggs/
+build/
+dist/
+sdist/
+wheels/
+*.whl
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.cache
+.hypothesis/
+nosetests.xml
+coverage.xml
+*.cover
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+.venv-test/
+
+# uv - lockfile not tracked: the Docker build uses `pip install` (not `uv sync`),
+# so a committed uv.lock would be a phantom artifact with no effect on deploys.
+uv.lock
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Docker / runtime
+*.pid
+*.log
+*.log.*
+
+# Generated docs (CI regenerates from registered tools)
+docs/tools.md
+
+# OS / temp
+.DS_Store
+Thumbs.db
+desktop.ini

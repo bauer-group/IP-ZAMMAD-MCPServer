@@ -1,0 +1,71 @@
+# =============================================================================
+# Dependabot Configuration
+# =============================================================================
+# Watches:
+#   1. GitHub Actions versions (workflows pinned to @main pull module updates)
+#   2. Image references inside docker-compose*.yml files
+#   3. bg-zammad-mcp base image (python:3.14-alpine)
+#   4. bg-zammad-mcp Python deps (pyproject.toml)
+# =============================================================================
+
+version: 2
+updates:
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:30"
+      timezone: "Etc/UTC"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "dependabot"
+    commit-message:
+      prefix: "chore(ci)"
+
+  # Docker Compose images
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:30"
+      timezone: "Etc/UTC"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "dependabot"
+    commit-message:
+      prefix: "chore(deps)"
+
+  # bg-zammad-mcp base image (python:3.14-alpine in app/bg-zammad-mcp/Dockerfile)
+  - package-ecosystem: "docker"
+    directory: "/app/bg-zammad-mcp"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:30"
+      timezone: "Etc/UTC"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "dependabot"
+    commit-message:
+      prefix: "chore(docker)"
+
+  # bg-zammad-mcp Python deps (declared in pyproject.toml)
+  - package-ecosystem: "pip"
+    directory: "/app/bg-zammad-mcp"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:30"
+      timezone: "Etc/UTC"
+    labels:
+      - "dependencies"
+      - "python"
+      - "dependabot"
+    commit-message:
+      prefix: "chore(deps)"

@@ -1,0 +1,190 @@
+# =============================================================================
+# Zammad MCP Server - Production Stack (Traefik Reverse Proxy)
+# =============================================================================
+# Usage:  docker compose -f docker-compose.traefik.yml up -d
+#
+# Prerequisites:
+#   - Traefik v2/v3 reverse proxy running on the ${PROXY_NETWORK} network
+#   - DNS record: ${ZAMMAD_MCP_HOSTNAME} -> this host
+#   - A reachable Zammad instance (same Docker network or public URL)
+#   - Either: an OAuth2 Application registered in Zammad
+#       (Admin -> Manage -> OAuth2 Applications -> Add)
+#     Or:     an external OIDC App Registration / OAuth client + ZAMMAD_API_TOKEN
+#
+# Architecture:
+#       AI Clients
+#            |  HTTPS (OAuth 2.1, /mcp)
+#            v
+#       +---------+
+#       | Traefik | - proxy network (external)
+#       +----+----+
+#            |
+#       +----v--------------+
+#       | zammad-mcp - redis| - local network (private)
+#       +-------------------+
+# =============================================================================
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "3"
+
+services:
+  zammad-mcp:
+    image: ${ZAMMAD_MCP_IMAGE:-ghcr.io/bauer-group/zammad-mcpserver/bg-zammad-mcp}:${ZAMMAD_MCP_VERSION:-latest}
+    container_name: ${STACK_NAME:-bg-zammad-mcp}
+    hostname: ${STACK_NAME:-bg-zammad-mcp}
+    restart: unless-stopped
+    <<: *logging
+
+    environment:
+      TZ: ${TIME_ZONE:-Etc/UTC}
+
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?PUBLIC_BASE_URL is required}
+
+      MCP_TRANSPORT: ${MCP_TRANSPORT:-streamable-http}
+      MCP_HOST: ${MCP_HOST:-}
+      MCP_PORT: ${MCP_PORT:-8000}
+
+      MCP_DISPLAY_NAME: ${MCP_DISPLAY_NAME:-BAUER GROUP Zammad}
+      MCP_ICON_URL: ${MCP_ICON_URL:-}
+      MCP_WEBSITE_URL: ${MCP_WEBSITE_URL:-https://go.bauer-group.com/mcp-server}
+
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+      ZAMMAD_URL: ${ZAMMAD_URL:?ZAMMAD_URL is required}
+      ZAMMAD_API_TOKEN: ${ZAMMAD_API_TOKEN:-}
+      ZAMMAD_HTTP_TIMEOUT: ${ZAMMAD_HTTP_TIMEOUT:-30}
+      ZAMMAD_VERIFY_TLS: ${ZAMMAD_VERIFY_TLS:-true}
+
+      AUTH_MODE: ${AUTH_MODE:?AUTH_MODE is required (zammad | oidc)}
+      AUTH_JWT_SIGNING_KEY: ${AUTH_JWT_SIGNING_KEY:?AUTH_JWT_SIGNING_KEY is required}
+      AUTH_REDIS_URL: ${AUTH_REDIS_URL:-redis://redis:6379/0}
+      AUTH_STORAGE_ENCRYPTION_KEY: ${AUTH_STORAGE_ENCRYPTION_KEY:?AUTH_STORAGE_ENCRYPTION_KEY is required}
+      AUTH_DISK_STORAGE_PATH: ${AUTH_DISK_STORAGE_PATH:-/app/data/oauth-storage}
+
+      ZAMMAD_OAUTH_CLIENT_ID: ${ZAMMAD_OAUTH_CLIENT_ID:-}
+      ZAMMAD_OAUTH_CLIENT_SECRET: ${ZAMMAD_OAUTH_CLIENT_SECRET:-}
+      ZAMMAD_OAUTH_SCOPES: ${ZAMMAD_OAUTH_SCOPES:-read write}
+      ZAMMAD_OAUTH_AUTHORIZE_PATH: ${ZAMMAD_OAUTH_AUTHORIZE_PATH:-/oauth/authorize}
+      ZAMMAD_OAUTH_TOKEN_PATH: ${ZAMMAD_OAUTH_TOKEN_PATH:-/oauth/token}
+      ZAMMAD_USERINFO_PATH: ${ZAMMAD_USERINFO_PATH:-/api/v1/users/me}
+
+      OIDC_DISCOVERY_URL: ${OIDC_DISCOVERY_URL:-}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_AUTH_URI: ${OIDC_AUTH_URI:-}
+      OIDC_TOKEN_URI: ${OIDC_TOKEN_URI:-}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI:-}
+      OIDC_USERINFO_URI: ${OIDC_USERINFO_URI:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}
+
+      MCP_ALLOWED_ROLES: ${MCP_ALLOWED_ROLES:-Admin,Agent}
+      MCP_ROLE_CHECK_AUDIT_ONLY: ${MCP_ROLE_CHECK_AUDIT_ONLY:-false}
+      MCP_ROLE_CACHE_TTL_SECONDS: ${MCP_ROLE_CACHE_TTL_SECONDS:-60}
+
+      RATE_LIMITER_ENABLED: ${RATE_LIMITER_ENABLED:-true}
+      RATE_LIMITER_MAX_REQUESTS_PER_SECOND: ${RATE_LIMITER_MAX_REQUESTS_PER_SECOND:-10}
+      RATE_LIMITER_BURST_CAPACITY: ${RATE_LIMITER_BURST_CAPACITY:-20}
+      RATE_LIMITER_GLOBAL: ${RATE_LIMITER_GLOBAL:-false}
+      # 1 = single Traefik in front. Bump to 2 if you stack Cloudflare /
+      # another edge proxy in front of Traefik.
+      RATE_LIMITER_TRUSTED_PROXY_HOPS: ${RATE_LIMITER_TRUSTED_PROXY_HOPS:-1}
+
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.05}
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    expose:
+      - ${MCP_PORT:-8000}
+
+    networks:
+      - proxy
+      - local
+
+    volumes:
+      - oauth-data:/app/data/oauth-storage
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:${MCP_PORT:-8000}/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${PROXY_NETWORK:-EDGEPROXY}"
+
+      # HTTP -> HTTPS redirect
+      - "traefik.http.middlewares.${STACK_NAME:-bg-zammad-mcp}-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.${STACK_NAME:-bg-zammad-mcp}-redirect.redirectscheme.permanent=true"
+
+      - "traefik.http.routers.${STACK_NAME:-bg-zammad-mcp}-http.rule=Host(`${ZAMMAD_MCP_HOSTNAME}`)"
+      - "traefik.http.routers.${STACK_NAME:-bg-zammad-mcp}-http.entrypoints=web"
+      - "traefik.http.routers.${STACK_NAME:-bg-zammad-mcp}-http.middlewares=${STACK_NAME:-bg-zammad-mcp}-redirect"
+
+      # HTTPS
+      - "traefik.http.routers.${STACK_NAME:-bg-zammad-mcp}-app.rule=Host(`${ZAMMAD_MCP_HOSTNAME}`)"
+      - "traefik.http.routers.${STACK_NAME:-bg-zammad-mcp}-app.entrypoints=web-secure"
+      - "traefik.http.routers.${STACK_NAME:-bg-zammad-mcp}-app.tls=true"
+      - "traefik.http.routers.${STACK_NAME:-bg-zammad-mcp}-app.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.${STACK_NAME:-bg-zammad-mcp}-app.service=${STACK_NAME:-bg-zammad-mcp}-app"
+      - "traefik.http.services.${STACK_NAME:-bg-zammad-mcp}-app.loadBalancer.server.port=${MCP_PORT:-8000}"
+
+
+  redis:
+    image: ${REDIS_IMAGE:-redis}:${REDIS_VERSION:-8-alpine}
+    container_name: ${STACK_NAME:-bg-zammad-mcp}-redis
+    restart: unless-stopped
+    <<: *logging
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-256mb}
+      - --maxmemory-policy
+      - noeviction
+    mem_limit: ${REDIS_CONTAINER_MEM_LIMIT:-384m}
+    mem_reservation: 64m
+    expose:
+      - 6379
+    volumes:
+      - redis-data:/data
+    networks:
+      - local
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+volumes:
+  redis-data:
+    driver: local
+    name: ${STACK_NAME:-bg-zammad-mcp}-redis
+  oauth-data:
+    driver: local
+    name: ${STACK_NAME:-bg-zammad-mcp}-oauth
+
+
+networks:
+  local:
+    driver: bridge
+    name: ${STACK_NAME:-bg-zammad-mcp}
+    enable_ipv6: true
+
+  proxy:
+    name: ${PROXY_NETWORK:-EDGEPROXY}
+    external: true

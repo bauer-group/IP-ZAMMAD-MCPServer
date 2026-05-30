@@ -1,0 +1,128 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bg-zammad-mcp"
+version = "0.1.0"
+description = "BAUER GROUP Zammad MCP Server — OAuth2-gated remote MCP bridge for self-hosted Zammad (v6.x / v7.x)"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "BAUER GROUP", email = "info@bauer-group.com" },
+    { name = "Karl Bauer", email = "karl.bauer@bauer-group.com" },
+]
+requires-python = ">=3.13"
+keywords = ["mcp", "zammad", "oauth", "fastmcp", "helpdesk", "ticketing", "ai", "claude"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Office/Business :: Groupware",
+]
+dependencies = [
+    # MCP framework — ships OAuthProxy / OIDCProxy and the streamable-HTTP
+    # transport. 3.x replaced authlib.jose with joserfc.
+    "fastmcp>=3.0.0,<4.0.0",
+
+    # Async HTTP — used by FastMCP internally and by our Zammad client wrapper.
+    "httpx>=0.28.1,<1.0.0",
+
+    # Type-safe environment-based configuration.
+    "pydantic>=2.10.0,<3.0.0",
+    "pydantic-settings>=2.14.1,<3.0.0",
+
+    # CLI surface: `serve`, `tools`, `health`, `probe`.
+    "typer>=0.15.0,<1.0.0",
+
+    # Structured logging + pretty dev console.
+    "structlog>=24.4.0,<26.0.0",
+    "rich>=13.7.0,<15.0.0",
+
+    # OAuth client-state storage. DiskStore needs the [disk] extra,
+    # RedisStore needs the [redis] extra. We request both explicitly because
+    # FastMCP itself ships py-key-value-aio without extras.
+    "py-key-value-aio[disk,redis]>=0.4.4,<1.0.0",
+    "cryptography>=43.0.0,<49.0.0",
+
+    # Optional error tracking — loaded lazily, controlled by SENTRY_DSN.
+    "sentry-sdk>=2.18.0,<3.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.3.0,<10.0.0",
+    "pytest-asyncio>=0.24.0,<2.0.0",
+    "pytest-httpx>=0.35.0,<1.0.0",
+    "pytest-cov>=6.0.0,<8.0.0",
+    "respx>=0.22.0,<1.0.0",
+]
+dev = [
+    "ruff>=0.7.0",
+    "mypy>=1.13.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/bauer-group/ZAMMAD-MCPServer"
+Source = "https://github.com/bauer-group/ZAMMAD-MCPServer"
+Issues = "https://github.com/bauer-group/ZAMMAD-MCPServer/issues"
+
+[project.scripts]
+bg-zammad-mcp = "main:app"
+
+# ── Hatch build configuration ──────────────────────────────────────────────
+# We ship a top-level package laid out under src/ - this points the wheel at it.
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src" = ""
+
+# ── Tooling ────────────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--tb=short",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:pydantic._internal.*",
+    "ignore::DeprecationWarning:starlette.*",
+]
+markers = [
+    "integration: marks tests that hit external services (deselect with '-m \"not integration\"')",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+fail_under = 60
+show_missing = true
+skip_covered = false
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true

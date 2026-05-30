@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>BAUER GROUP - Zammad MCP Server</title>
+    <link rel="icon" type="image/svg+xml" href="/logo.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --orange-50: #FFF7ED; --orange-100: #FFEDD5; --orange-200: #FED7AA; --orange-300: #FDBA74;
+            --orange-400: #FB923C; --orange-500: #FF8500; --orange-600: #EA6D00; --orange-700: #C2570A;
+            --orange-800: #9A4509; --orange-900: #7C3A0A;
+            --warm-50: #F9F8F6; --warm-100: #F0EDEA; --warm-200: #E0DBD6; --warm-300: #C4BDB7;
+            --warm-400: #A69E97; --warm-500: #887F78; --warm-600: #6B635C; --warm-700: #524B45;
+            --warm-800: #3A3430; --warm-900: #231F1C;
+            --text-primary: var(--warm-900); --text-secondary: var(--warm-600); --text-muted: var(--warm-500);
+            --bg-primary: #FFFFFF; --bg-subtle: var(--warm-50); --bg-muted: var(--warm-100);
+            --border: var(--warm-200); --border-strong: var(--warm-300);
+            --success-500: #22C55E; --success-100: #DCFCE7;
+            --warning-500: #EAB308;
+            --error-500: #EF4444;
+            --font-body: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { overflow-x: hidden; }
+        body {
+            font-family: var(--font-body);
+            color: var(--text-primary);
+            background: linear-gradient(135deg, var(--warm-50) 0%, var(--warm-200) 100%);
+            min-height: 100vh;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 2rem;
+            -webkit-font-smoothing: antialiased;
+        }
+        .container {
+            max-width: 900px; width: 100%;
+            background: rgba(255, 255, 255, 0.85);
+            -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+            border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(35, 31, 28, 0.08), 0 1px 3px rgba(35, 31, 28, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            overflow: hidden;
+            animation: fadeIn 0.6s ease-out;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .header {
+            padding: 3rem 3rem 2rem; text-align: center;
+            border-bottom: 1px solid var(--border); position: relative;
+        }
+        .header::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+            background: linear-gradient(90deg, var(--orange-400), var(--orange-600));
+        }
+        .logo { width: 80px; height: 80px; margin-bottom: 1.5rem; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        h1 { color: var(--warm-900); font-size: 2.25rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+        .subtitle { color: var(--text-secondary); font-size: 1.125rem; font-weight: 500; }
+        .content {
+            padding: 3rem;
+            display: grid; grid-template-columns: 1fr; gap: 2rem;
+        }
+        @media (min-width: 640px) { .content { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 480px) {
+            body { padding: 0.75rem; }
+            .container { border-radius: 16px; }
+            .header { padding: 2rem 1.25rem 1.5rem; }
+            .logo { width: 64px; height: 64px; margin-bottom: 1rem; }
+            h1 { font-size: 1.625rem; }
+            .subtitle { font-size: 1rem; }
+            .content { padding: 1.25rem; gap: 1rem; }
+            .info-card, .endpoints, .quickstart { padding: 1.25rem; }
+            .copy-box { flex-direction: column; }
+            .copy-box input { width: 100%; border-bottom: 1px solid var(--border); }
+            .copy-box button { width: 100%; padding: 0.75rem 1rem; }
+            .footer { padding: 1.5rem 1rem; }
+        }
+        .info-card {
+            background: var(--bg-primary); border: 1px solid var(--border);
+            border-radius: 16px; padding: 1.5rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .info-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(35, 31, 28, 0.06);
+            border-color: var(--orange-200);
+        }
+        .info-label {
+            font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--text-muted); font-weight: 600; margin-bottom: 0.5rem;
+        }
+        .info-value {
+            font-size: 1.25rem; font-weight: 600; color: var(--text-primary);
+            display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+        }
+        .info-value .secondary { color: var(--text-muted); font-weight: 400; font-size: 0.875rem; margin-left: auto; }
+        .status-badge {
+            display: inline-flex; align-items: center;
+            padding: 0.375rem 0.875rem; border-radius: 9999px;
+            font-size: 0.875rem; font-weight: 600; letter-spacing: 0.02em;
+        }
+        .status-badge.healthy { background: var(--success-100); color: var(--success-500); }
+        .status-badge.degraded { background: #FEF9C3; color: var(--warning-500); }
+        .status-badge.unhealthy { background: #FEE2E2; color: var(--error-500); }
+        .status-badge.loading { background: var(--bg-muted); color: var(--text-secondary); }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .healthy .status-dot { background-color: var(--success-500); box-shadow: 0 0 8px var(--success-500); }
+        .degraded .status-dot { background-color: var(--warning-500); }
+        .unhealthy .status-dot { background-color: var(--error-500); }
+        .loading .status-dot { background-color: var(--text-muted); animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.3; } }
+        .auth-pill {
+            font-family: var(--font-mono); font-size: 0.875rem; font-weight: 600;
+            padding: 0.25rem 0.625rem; border-radius: 6px;
+            background: var(--orange-100); color: var(--orange-800);
+        }
+        .env-pill {
+            font-family: var(--font-mono); font-size: 0.875rem; font-weight: 600;
+            padding: 0.25rem 0.625rem; border-radius: 6px;
+        }
+        .env-pill.production { background: var(--success-100); color: var(--success-500); }
+        .env-pill.staging    { background: #FEF9C3;            color: var(--warning-500); }
+        .env-pill.development{ background: var(--warm-100);    color: var(--warm-800); }
+        .endpoints, .quickstart {
+            grid-column: 1 / -1;
+            background: var(--bg-subtle); border-radius: 16px;
+            padding: 1.5rem; border: 1px solid var(--border);
+        }
+        .endpoints > .info-label { margin-bottom: 1rem; }
+        .endpoint-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.875rem 0; border-bottom: 1px solid var(--border);
+            gap: 1rem; flex-wrap: wrap;
+        }
+        .endpoint-row:last-child { border-bottom: none; padding-bottom: 0; }
+        .endpoint-row:first-of-type { padding-top: 0; }
+        .endpoint-method {
+            font-family: var(--font-mono); font-weight: 700; font-size: 0.8125rem;
+            padding: 0.25rem 0.5rem; border-radius: 4px;
+            background: var(--warm-100); color: var(--warm-800);
+            min-width: 56px; text-align: center;
+        }
+        .endpoint-method.post { background: var(--orange-100); color: var(--orange-800); }
+        .endpoint-method.get  { background: var(--success-100); color: var(--success-500); }
+        .endpoint-path { font-family: var(--font-mono); color: var(--warm-700); font-weight: 500; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        .endpoint-note { color: var(--text-muted); font-size: 0.8125rem; font-weight: 500; max-width: 17rem; text-align: right; line-height: 1.4; }
+        .quickstart h2 {
+            font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--text-muted); font-weight: 600; margin-bottom: 1rem;
+        }
+        .quickstart ol { margin: 0 0 1rem 1.25rem; color: var(--text-secondary); font-size: 0.9375rem; line-height: 1.7; }
+        .quickstart ol li::marker { color: var(--orange-500); font-weight: 700; }
+        .quickstart code {
+            font-family: var(--font-mono); background: var(--bg-primary); color: var(--warm-800);
+            padding: 0.125rem 0.375rem; border-radius: 4px;
+            font-size: 0.875rem; border: 1px solid var(--border);
+        }
+        .copy-box {
+            display: flex; align-items: stretch; gap: 0; margin-top: 0.75rem;
+            background: var(--bg-primary); border: 1px solid var(--border);
+            border-radius: 10px; overflow: hidden;
+        }
+        .copy-box input {
+            flex: 1; border: 0; outline: 0; padding: 0.75rem 1rem;
+            font-family: var(--font-mono); font-size: 0.9375rem; color: var(--warm-800);
+            background: transparent; min-width: 0;
+        }
+        .copy-box button {
+            border: 0; background: var(--orange-500); color: #FFFFFF;
+            padding: 0 1.25rem; font-family: var(--font-body); font-weight: 600;
+            font-size: 0.875rem; cursor: pointer; transition: background-color 0.2s ease;
+        }
+        .copy-box button:hover { background: var(--orange-600); }
+        .copy-box button.copied { background: var(--success-500); }
+        .docs-link {
+            color: var(--orange-700); text-decoration: none; font-weight: 600;
+            border-bottom: 1px solid transparent; transition: border-color 0.2s ease;
+        }
+        .docs-link:hover { border-bottom-color: var(--orange-500); }
+        .footer {
+            text-align: center; padding: 2rem;
+            color: var(--text-muted); font-size: 0.875rem;
+            border-top: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img class="logo" src="/logo.svg" alt="BAUER GROUP" width="80" height="80" />
+            <h1>Zammad MCP Server</h1>
+            <p class="subtitle">OAuth-gated MCP bridge for your self-hosted Zammad helpdesk (v6 / v7)</p>
+        </div>
+
+        <div class="content">
+            <div class="info-card">
+                <div class="info-label">System Status</div>
+                <div class="info-value">
+                    <span id="system-status" class="status-badge loading">
+                        <span class="status-dot"></span> <span id="status-text">Connecting...</span>
+                    </span>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-label">Version &amp; Protocol</div>
+                <div class="info-value">
+                    <span>v$version</span>
+                    <span class="secondary">$protocol</span>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-label">Environment</div>
+                <div class="info-value">
+                    <span class="env-pill $environment">$environment</span>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-label">Auth Mode</div>
+                <div class="info-value">
+                    <span class="auth-pill">$auth_mode</span>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-label">Zammad Backend</div>
+                <div class="info-value">
+                    <span style="font-family: var(--font-mono); font-size: 0.95rem; overflow-wrap: anywhere;">$zammad_url</span>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-label">Documentation</div>
+                <div class="info-value">
+                    <a class="docs-link" href="https://github.com/bauer-group/ZAMMAD-MCPServer#readme" target="_blank" rel="noopener noreferrer">README &amp; setup guides &rarr;</a>
+                </div>
+            </div>
+
+            <div class="quickstart">
+                <h2>Connect in Claude.ai</h2>
+                <ol>
+                    <li>Open <code>https://claude.ai</code> &rarr; <strong>Settings &rarr; Connectors &rarr; Add custom connector</strong>.</li>
+                    <li><strong>Name:</strong> <code>Zammad</code> &nbsp;&middot;&nbsp; <strong>URL:</strong> the MCP address below.</li>
+                    <li>Click <strong>Connect</strong> &rarr; OAuth login via Zammad (or your configured IdP) &rarr; tools appear.</li>
+                </ol>
+                <div class="copy-box">
+                    <input id="mcp-url" type="text" readonly value="$mcp_url" aria-label="MCP URL">
+                    <button id="copy-btn" type="button">Copy</button>
+                </div>
+            </div>
+
+            <div class="endpoints">
+                <div class="info-label">Available Endpoints</div>
+                <div class="endpoint-row">
+                    <span class="endpoint-method post">POST</span>
+                    <span class="endpoint-path">/mcp</span>
+                    <span class="endpoint-note">MCP JSON-RPC (OAuth-gated)</span>
+                </div>
+                <div class="endpoint-row">
+                    <span class="endpoint-method get">GET</span>
+                    <span class="endpoint-path">/healthz</span>
+                    <span class="endpoint-note">Liveness probe</span>
+                </div>
+                <div class="endpoint-row">
+                    <span class="endpoint-method get">GET</span>
+                    <span class="endpoint-path">/.well-known/oauth-protected-resource/mcp</span>
+                    <span class="endpoint-note">OAuth Resource Metadata (RFC 9728)</span>
+                </div>
+                <div class="endpoint-row">
+                    <span class="endpoint-method get">GET</span>
+                    <span class="endpoint-path">/.well-known/oauth-authorization-server</span>
+                    <span class="endpoint-note">OAuth Server Metadata</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            &copy; <span id="year"></span> BAUER GROUP &middot;
+            <a class="docs-link" href="https://github.com/bauer-group/ZAMMAD-MCPServer#readme" target="_blank" rel="noopener noreferrer">Documentation</a>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('year').textContent = new Date().getFullYear();
+
+        async function pollHealth() {
+            const badge = document.getElementById('system-status');
+            const text = document.getElementById('status-text');
+            try {
+                const resp = await fetch('/healthz', { cache: 'no-store' });
+                badge.className = 'status-badge';
+                if (resp.ok) {
+                    badge.classList.add('healthy');
+                    text.textContent = 'Operational';
+                } else {
+                    badge.classList.add('degraded');
+                    text.textContent = 'HTTP ' + resp.status;
+                }
+            } catch (_err) {
+                badge.className = 'status-badge unhealthy';
+                text.textContent = 'Offline';
+            }
+        }
+
+        const btn = document.getElementById('copy-btn');
+        const input = document.getElementById('mcp-url');
+        btn.addEventListener('click', async () => {
+            try { await navigator.clipboard.writeText(input.value); }
+            catch (_err) { input.select(); document.execCommand('copy'); }
+            const original = btn.textContent;
+            btn.textContent = 'Copied!';
+            btn.classList.add('copied');
+            setTimeout(() => { btn.textContent = original; btn.classList.remove('copied'); }, 1500);
+        });
+
+        pollHealth();
+        setInterval(pollHealth, 30000);
+    </script>
+</body>
+</html>

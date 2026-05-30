@@ -1,0 +1,35 @@
+# =============================================================================
+# Zammad MCP image build context
+# =============================================================================
+
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+.installed.cfg
+*.egg
+
+.pytest_cache
+.coverage
+.coverage.*
+htmlcov
+.mypy_cache
+.ruff_cache
+.tox
+.nox
+
+.venv
+venv
+env
+
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+*.log
+*.pid

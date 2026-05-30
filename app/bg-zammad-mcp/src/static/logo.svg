@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" role="img" aria-label="BAUER GROUP Zammad MCP">
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FB923C"/>
+      <stop offset="100%" stop-color="#C2570A"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="84" height="84" rx="20" fill="url(#grad)"/>
+  <!-- Ticket / chat-bubble silhouette: layered ticket stack with notch -->
+  <g fill="#FFF7ED">
+    <path d="M28 30 h32 a6 6 0 0 1 6 6 v20 a6 6 0 0 1 -6 6 h-22 l-10 8 v-8 h-0 a6 6 0 0 1 -6 -6 v-20 a6 6 0 0 1 6 -6 z" opacity="0.95"/>
+  </g>
+  <g fill="#9A4509" font-family="JetBrains Mono, ui-monospace, monospace" font-weight="700">
+    <!-- Three dots evoking message lines -->
+    <circle cx="36" cy="46" r="2.5"/>
+    <circle cx="46" cy="46" r="2.5"/>
+    <circle cx="56" cy="46" r="2.5"/>
+  </g>
+  <!-- BAUER GROUP wordmark stripe -->
+  <rect x="6" y="78" width="84" height="12" rx="6" fill="#231F1C"/>
+  <text x="48" y="87" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="8" font-weight="700" fill="#FFF7ED" letter-spacing="0.8">BAUER GROUP</text>
+</svg>

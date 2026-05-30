@@ -1,0 +1,37 @@
+# =============================================================================
+# bg-zammad-mcp — root .dockerignore
+# =============================================================================
+# Keeps build contexts lean. The per-image .dockerignore in app/bg-zammad-mcp/
+# governs what the image actually sees.
+
+.git
+.github
+.gitignore
+.dockerignore
+
+.env
+.env.*
+!.env.example
+
+docs
+*.md
+LICENSE
+
+docker-compose*.yml
+
+scripts
+
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+
+__pycache__
+*.pyc
+.pytest_cache
+.coverage
+.mypy_cache
+.ruff_cache
+.venv
+venv
+.venv-test
