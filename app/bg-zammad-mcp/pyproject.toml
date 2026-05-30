@@ -68,9 +68,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/bauer-group/ZAMMAD-MCPServer"
-Source = "https://github.com/bauer-group/ZAMMAD-MCPServer"
-Issues = "https://github.com/bauer-group/ZAMMAD-MCPServer/issues"
+Homepage = "https://github.com/bauer-group/IP-ZAMMAD-MCPServer"
+Source = "https://github.com/bauer-group/IP-ZAMMAD-MCPServer"
+Issues = "https://github.com/bauer-group/IP-ZAMMAD-MCPServer/issues"
 
 [project.scripts]
 bg-zammad-mcp = "main:app"

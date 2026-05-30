@@ -6,7 +6,7 @@
 > ChatGPT Connectors, Cursor, Continue.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Docker Image](https://img.shields.io/badge/ghcr.io-bg--zammad--mcp-blue?logo=docker)](https://github.com/bauer-group/ZAMMAD-MCPServer/pkgs/container/zammad-mcpserver%2Fbg-zammad-mcp)
+[![Docker Image](https://img.shields.io/badge/ghcr.io-bg--zammad--mcp-blue?logo=docker)](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/pkgs/container/ip-zammad-mcpserver%2Fbg-zammad-mcp)
 [![FastMCP](https://img.shields.io/badge/built%20with-FastMCP-purple)](https://gofastmcp.com)
 [![Zammad v6/v7](https://img.shields.io/badge/Zammad-v6%20%2F%20v7-orange)](https://zammad.org)
 
@@ -174,7 +174,7 @@ list. Casing and whitespace are normalised. Full details:
 ## Repository Layout
 
 ```text
-ZAMMAD-MCPServer/
+IP-ZAMMAD-MCPServer/
 ├── README.md                        ← you are here
 ├── LICENSE                          ← MIT
 ├── CHANGELOG.md

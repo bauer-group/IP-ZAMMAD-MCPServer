@@ -20,7 +20,7 @@ services:
     build:
       context: ./app/bg-zammad-mcp
       target: production
-    image: ${ZAMMAD_MCP_IMAGE:-ghcr.io/bauer-group/zammad-mcpserver/bg-zammad-mcp}:${ZAMMAD_MCP_VERSION:-latest}
+    image: ${ZAMMAD_MCP_IMAGE:-ghcr.io/bauer-group/ip-zammad-mcpserver/bg-zammad-mcp}:${ZAMMAD_MCP_VERSION:-latest}
     container_name: ${STACK_NAME:-bg-zammad-mcp}
     hostname: ${STACK_NAME:-bg-zammad-mcp}
     restart: unless-stopped

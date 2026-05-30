@@ -79,7 +79,7 @@ jobs:
     with:
       deploy-environment: 'production'
       publish-to: 'ghcr'
-      ghcr-image-name: 'bauer-group/ZAMMAD-MCPServer/bg-zammad-mcp'
+      ghcr-image-name: 'bauer-group/IP-ZAMMAD-MCPServer/bg-zammad-mcp'
       docker-image-name: 'bauergroup/bg-zammad-mcp'
 
       release-version: ${{ needs.release.outputs.version }}
@@ -111,7 +111,7 @@ jobs:
     uses: bauer-group/automation-templates/.github/workflows/docker-build.yml@main
     with:
       publish-to: 'ghcr'
-      ghcr-image-name: 'bauer-group/ZAMMAD-MCPServer/bg-zammad-mcp'
+      ghcr-image-name: 'bauer-group/IP-ZAMMAD-MCPServer/bg-zammad-mcp'
 
       auto-tags: true
       dockerfile-path: './app/bg-zammad-mcp/Dockerfile'
