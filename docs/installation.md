@@ -147,12 +147,12 @@ After any of the three paths, the container exposes:
 | `GET /.well-known/oauth-protected-resource/mcp` | RFC 9728 metadata |
 | `GET /.well-known/oauth-authorization-server` | OAuth Server metadata |
 
-Inside the container:
+Container liveness is the unauthenticated `/healthz` route (used by the Docker
+`HEALTHCHECK`); the server exposes a single `serve` command (the default):
 
 ```bash
-docker exec -it bg-zammad-mcp python src/main.py health    # probes Zammad
-docker exec -it bg-zammad-mcp python src/main.py probe     # detects v6/v7
-docker exec -it bg-zammad-mcp python src/main.py tools     # lists MCP tools
+docker exec -it bg-zammad-mcp curl -fsS http://localhost:8000/healthz
+# {"status": "ok"}
 ```
 
 Next steps:

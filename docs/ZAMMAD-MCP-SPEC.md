@@ -124,8 +124,8 @@ specific MCP instance.
 | `notifications.py` | 5 | online notifications + ticket subscribe/unsubscribe |
 | **Total** | **~36** | — |
 
-The full live catalogue is at [tools.md](./tools.md) — regenerated from
-`bg-zammad-mcp tools` in CI.
+The full live catalogue is at [tools.md](./tools.md). The tool surface is the
+hand-written `python` source registered via the profile (`server:register`).
 
 ## Compatibility matrix
 

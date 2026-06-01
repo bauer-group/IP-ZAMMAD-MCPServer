@@ -7,26 +7,35 @@ client-connection instructions.
 
 ## Internal Architecture
 
+This server is a thin consumer of the shared **[bg-mcpcore](https://github.com/bauer-group/LIB-BG-MCPCore)**
+framework (pulled from GitHub, pinned to a release tag). bg-mcpcore provides all
+the cross-cutting machinery — the settings base, inbound auth, the encrypted
+OAuth-state store, structured logging with PII redaction, rate limiting, the
+`/healthz` · `/` · `/logo.svg` routes, the outbound HTTP client, and the
+declarative-profile + CLI surface. Only the Zammad-specific parts live here:
+
 ```text
 src/
-  config.py              Pydantic-Settings model + AUTH_MODE / ROLE validation
-  logging_setup.py       structlog + Rich (console / json modes)
-  server.py              FastMCP construction + lifespan + middleware wiring
-  main.py                Typer CLI (serve / tools / health / probe)
-  rate_limit.py          Token-bucket limiter, OAuth-subject / proxy-aware IP keyed
+  profiles/zammad.json   Declarative profile: backend, auth wiring, tool source
+  main.py                4-line entrypoint — make_cli(load_profile(...), Settings)
+  config.py              Settings(bg_mcpcore.BaseMcpSettings) — only the Zammad
+                         backend / OAuth2 / role fields + per-mode validation
+  server.py              The two Zammad seams referenced by the profile:
+                           make_obo_resolver  outbound per-user on-behalf-of
+                                              AuthHeaderSource (Token vs Bearer,
+                                              fail-closed)
+                           register           decoding shim -> the tool modules
+                                              (so they stay unchanged)
   auth/
-    provider_factory.py  AUTH_MODE -> concrete provider
-    zammad_oauth.py      Zammad as OAuth2 provider (user-context token forwarding)
-    generic_oidc.py      External OIDC (Entra, Keycloak, ...) + ZAMMAD_API_TOKEN
-    role_middleware.py   Role-based MCP access gating (Admin / Agent / Customer)
-    client_storage.py    Encrypted OAuth state store (Redis or disk fallback)
-    upstream_token.py    Helper to retrieve the user's Zammad bearer token
+    zammad_oauth.py      Zammad as OAuth2 provider
+                         (entry point: bg_mcpcore.auth_providers = zammad)
+    role_middleware.py   Role-allowlist gate (Admin / Agent / Customer)
+                         (entry point: bg_mcpcore.auth_middleware = zammad)
+    upstream_token.py    Resolve the user's Zammad bearer token (fail-closed)
   zammad/
-    client.py            Async httpx wrapper (Bearer or Token=, retries, errors)
-    errors.py            Typed exception hierarchy
-    version_probe.py     Detect Zammad v6/v7 at startup
+    errors.py            Typed exception hierarchy (raised by the shim on non-2xx)
     tools/
-      __init__.py        Registers all tools with the FastMCP instance
+      __init__.py        ToolContext Protocol the tool modules call against
       tickets.py         list/search/get/create/update/delete tickets
       articles.py        list/get/create ticket articles (messages, notes)
       users.py           list/search/get/create/update users + get_me
@@ -39,6 +48,10 @@ src/
     index.html           Landing page served at /
     logo.svg             Consent-screen brand asset served at /logo.svg
 ```
+
+The CLI exposes a single `serve` command (the default). Container liveness uses
+the unauthenticated `/healthz` route — there is no longer a `health` / `probe` /
+`tools` subcommand.
 
 ## Two trust boundaries
 

@@ -192,36 +192,25 @@ IP-ZAMMAD-MCPServer/
 │       ├── Dockerfile               ← multi-stage, test-gated
 │       ├── pyproject.toml
 │       ├── README.md                ← internal architecture
-│       ├── src/
-│       │   ├── main.py              ← Typer CLI (serve / tools / health / probe)
-│       │   ├── config.py            ← Pydantic Settings + AUTH_MODE / role validation
-│       │   ├── server.py            ← FastMCP construction + middleware wiring
-│       │   ├── rate_limit.py        ← Token-bucket limiter (sub/IP keyed)
-│       │   ├── logging_setup.py     ← structlog + Rich
+│       ├── src/                     ← only the Zammad-specific code lives here;
+│       │   │                          all cross-cutting infra is in bg-mcpcore
+│       │   ├── profiles/zammad.json ← declarative profile (backend, auth, tools)
+│       │   ├── main.py              ← entrypoint: make_cli(load_profile(...), Settings)
+│       │   ├── config.py            ← Settings(bg_mcpcore.BaseMcpSettings) + Zammad fields
+│       │   ├── server.py            ← Zammad seams: OBO resolver + tool decoding shim
 │       │   ├── auth/
-│       │   │   ├── provider_factory.py
-│       │   │   ├── zammad_oauth.py  ← Zammad as OAuth2 IdP
-│       │   │   ├── generic_oidc.py  ← External OIDC fallback
-│       │   │   ├── role_middleware.py ← MCP_ALLOWED_ROLES enforcement
-│       │   │   ├── client_storage.py ← Encrypted Redis/disk OAuth store
-│       │   │   └── upstream_token.py ← Resolves user's upstream Zammad token
+│       │   │   ├── zammad_oauth.py  ← Zammad as OAuth2 IdP (auth_providers entry point)
+│       │   │   ├── role_middleware.py ← MCP_ALLOWED_ROLES gate (auth_middleware entry point)
+│       │   │   └── upstream_token.py ← resolves the user's upstream Zammad token
 │       │   ├── zammad/
-│       │   │   ├── client.py        ← async httpx wrapper (Bearer + Token=)
-│       │   │   ├── errors.py        ← Typed exception hierarchy
-│       │   │   ├── version_probe.py ← v6/v7 detection
-│       │   │   └── tools/
-│       │   │       ├── tickets.py
-│       │   │       ├── articles.py
-│       │   │       ├── users.py
-│       │   │       ├── organizations.py
-│       │   │       ├── groups.py
-│       │   │       ├── tags.py
-│       │   │       ├── reference.py
-│       │   │       └── notifications.py
+│       │   │   ├── errors.py        ← typed exception hierarchy
+│       │   │   └── tools/           ← hand-written tool surface (36 tools)
+│       │   │       ├── tickets.py · articles.py · users.py · organizations.py
+│       │   │       └── groups.py · tags.py · reference.py · notifications.py
 │       │   └── static/
 │       │       ├── index.html       ← landing page served at /
 │       │       └── logo.svg         ← consent-screen brand asset
-│       └── tests/                   ← pytest (70+ tests, gates Docker build)
+│       └── tests/                   ← pytest (59 tests, gates the Docker build)
 │
 ├── docs/
 │   ├── ZAMMAD-MCP-SPEC.md           ← design specification
