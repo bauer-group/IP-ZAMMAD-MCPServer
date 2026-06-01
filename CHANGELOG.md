@@ -1,3 +1,9 @@
+## [0.1.3](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.2...v0.1.3) (2026-06-01)
+
+### ♻️ Refactoring
+
+* migrated onto the shared bg-mcpcore framework (Tier 3) ([0a0d7eb](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/0a0d7eb440ee5ef88c9acee302f5cc1963ffa631))
+
 ## [0.1.2](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.1...v0.1.2) (2026-05-31)
 
 ## [0.1.1](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.0...v0.1.1) (2026-05-30)
