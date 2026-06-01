@@ -72,7 +72,7 @@ LABEL org.opencontainers.image.documentation="https://github.com/bauer-group/IP-
 LABEL org.opencontainers.image.description="bg-zammad-mcp — OAuth-gated remote MCP for self-hosted Zammad v6/v7 (BAUER GROUP)"
 LABEL com.bauer-group.image.component="mcp-server"
 LABEL com.bauer-group.image.stack="zammad"
-LABEL org.opencontainers.image.version="0.1.2"
+LABEL org.opencontainers.image.version="0.1.3"
 
 RUN apk add --no-cache \
         tini \
