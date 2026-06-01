@@ -163,4 +163,33 @@ def _intersects(user_roles: set[str], allowed: set[str]) -> bool:
     return bool(user_roles & allowed)
 
 
-__all__ = ["RoleAllowlistMiddleware", "RoleNotAllowedError"]
+def build_role_middleware(settings: Any) -> RoleAllowlistMiddleware | None:
+    """Entry-point factory (``bg_mcpcore.auth_middleware`` keyed ``zammad``).
+
+    The framework discovers this config-driven and adds the returned middleware
+    automatically when ``AUTH_MODE=zammad``. Mirrors the previous inline wiring
+    in ``server.py``: the gate is active only in zammad mode with a non-empty
+    allowlist (external OIDC / static-token modes carry no Zammad roles, so
+    there is nothing to match against).
+    """
+    if str(getattr(settings, "auth_mode", "")) != "zammad":
+        return None
+    allowed = settings.allowed_roles_lower
+    if not allowed:
+        logger.warning(
+            "auth.role_allowlist_disabled",
+            note="MCP_ALLOWED_ROLES is empty - any authenticated Zammad user can call this MCP",
+        )
+        return None
+    logger.info(
+        "auth.role_allowlist_active",
+        allowed_roles=sorted(allowed),
+        audit_only=settings.mcp_role_check_audit_only,
+    )
+    return RoleAllowlistMiddleware(
+        allowed_roles=allowed,
+        audit_only=settings.mcp_role_check_audit_only,
+    )
+
+
+__all__ = ["RoleAllowlistMiddleware", "RoleNotAllowedError", "build_role_middleware"]

@@ -17,7 +17,6 @@ from auth.role_middleware import (
     _intersects,
 )
 
-
 # ── _extract_role_names ────────────────────────────────────────────────────
 
 

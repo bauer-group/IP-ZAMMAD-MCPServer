@@ -162,11 +162,15 @@ def _stringify(value: Any) -> str | None:
     return str(value)
 
 
-def build_zammad_oauth_provider(settings: Settings) -> Any:
-    """Construct the FastMCP OAuthProxy backed by Zammad's OAuth2 Applications."""
-    from fastmcp.server.auth.oauth_proxy import OAuthProxy
+def build_zammad_oauth_provider(settings: Settings, inbound: Any | None = None) -> Any:
+    """Construct the FastMCP OAuthProxy backed by Zammad's OAuth2 Applications.
 
-    from .client_storage import build_client_storage
+    Registered as a ``bg_mcpcore.auth_providers`` entry point keyed ``zammad``;
+    the framework's ``build_auth_provider(settings, inbound)`` calls it with the
+    profile's ``auth.inbound`` block (unused here — config comes from settings).
+    """
+    from bg_mcpcore.auth.storage import build_client_storage
+    from fastmcp.server.auth.oauth_proxy import OAuthProxy
 
     if not settings.zammad_oauth_client_id or not settings.zammad_oauth_client_secret:
         raise ValueError(

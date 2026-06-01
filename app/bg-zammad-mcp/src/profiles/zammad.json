@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/bauer-group/LIB-BG-MCPCore/main/src/bg_mcpcore/profile/schema.json",
+  "id": "zammad",
+  "display_name": "BAUER GROUP Zammad",
+  "instructions": "Self-hosted Zammad helpdesk. Use these tools to list, search, create, update, and analyse tickets, articles (messages), users, organizations, groups, tags, and notifications. All calls execute in the context of the authenticated Zammad user (when AUTH_MODE=zammad), so Zammad's own permission system enforces fine-grained access on every API call. Compatible with Zammad v6.x and v7.x.",
+  "backend": {
+    "base_url": "${env:ZAMMAD_URL}",
+    "api_base_path": "/api/v1"
+  },
+  "auth": {
+    "inbound": { "mode": "zammad" },
+    "outbound": { "type": "python", "resolver": "server:make_obo_resolver" }
+  },
+  "tools": { "source": "python", "register": "server:register" }
+}

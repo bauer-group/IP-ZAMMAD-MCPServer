@@ -33,12 +33,12 @@ _TEST_JWT_KEY = "f" * 64
 
 @pytest.fixture(autouse=True)
 def _reset_settings_singleton() -> Iterator[None]:
-    """Clear the lazy Settings singleton between tests so each test parses fresh env."""
-    import config as config_module
+    """Clear the bg-mcpcore per-class settings cache so each test parses fresh env."""
+    from bg_mcpcore.settings import reset_settings_cache
 
-    config_module._settings = None
+    reset_settings_cache()
     yield
-    config_module._settings = None
+    reset_settings_cache()
 
 
 @pytest.fixture

@@ -15,7 +15,8 @@
 # ── Stage 1: Builder — install Python dependencies into a relocatable prefix ──
 FROM python:3.14-alpine AS builder
 
-RUN apk add --no-cache build-base libffi-dev
+# git is required to install bg-mcpcore from its GitHub tag (a direct git ref).
+RUN apk add --no-cache build-base libffi-dev git
 
 WORKDIR /build
 
@@ -31,7 +32,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 # ── Stage 2: Test — run pytest; image build fails on any test failure ────────
 FROM python:3.14-alpine AS test
 
-RUN apk add --no-cache build-base libffi-dev
+RUN apk add --no-cache build-base libffi-dev git
 
 WORKDIR /app
 
@@ -125,7 +126,5 @@ CMD ["serve"]
 # -----------------------------------------------------------------------------
 # Usage
 # -----------------------------------------------------------------------------
-# Default (serve):        docker run ... bg-zammad-mcp
-# Health probe:           docker run ... bg-zammad-mcp health
-# Zammad version probe:   docker run ... bg-zammad-mcp probe
-# Print tool catalogue:   docker run ... bg-zammad-mcp tools
+# Default (serve):   docker run ... bg-zammad-mcp
+# Liveness:          GET /healthz (unauthenticated; used by the HEALTHCHECK above)

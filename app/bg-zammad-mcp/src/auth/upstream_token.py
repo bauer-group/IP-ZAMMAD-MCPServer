@@ -171,7 +171,7 @@ async def _safe_get(storage: Any, key: str) -> Any | None:
     """
     try:
         return await storage.get(key)
-    except Exception as exc:  # noqa: BLE001 - intentional broad catch
+    except Exception as exc:
         logger.debug("upstream_token.storage_lookup_failed", key=key, error=str(exc))
         return None
 

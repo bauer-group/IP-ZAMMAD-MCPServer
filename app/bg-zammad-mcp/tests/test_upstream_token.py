@@ -28,7 +28,7 @@ class _StubStorage:
     def __init__(self, data: dict | None = None) -> None:
         self._data = data or {}
 
-    async def get(self, key):  # noqa: ANN001
+    async def get(self, key):
         return self._data.get(key)
 
 
@@ -124,7 +124,7 @@ async def test_storage_exception_does_not_crash(patch_access_token):
     patch_access_token(_StubToken({"sub": "u1"}))
 
     class _BrokenStorage:
-        async def get(self, key):  # noqa: ANN001
+        async def get(self, key):
             raise RuntimeError("backend exploded")
 
     with pytest.raises(MissingUpstreamToken):
