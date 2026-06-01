@@ -36,7 +36,7 @@ dependencies = [
     # [redis] extra adds the RedisStore backend for the OAuth-state store.
     # bg-mcpcore transitively provides fastmcp / pydantic / pydantic-settings /
     # structlog / rich / cryptography / typer / py-key-value-aio[disk].
-    "bg-mcpcore[redis] @ git+https://github.com/bauer-group/LIB-BG-MCPCore.git@v1.3.0",
+    "bg-mcpcore[redis] @ git+https://github.com/bauer-group/LIB-BG-MCPCore.git@v1.4.0",
 
     # Directly imported by this server's own code (kept explicit; also provided
     # transitively by bg-mcpcore, so the version ranges stay compatible):
