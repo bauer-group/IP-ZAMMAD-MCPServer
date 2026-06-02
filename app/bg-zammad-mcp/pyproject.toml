@@ -36,7 +36,7 @@ dependencies = [
     # [redis] extra adds the RedisStore backend for the OAuth-state store.
     # bg-mcpcore transitively provides fastmcp / pydantic / pydantic-settings /
     # structlog / rich / cryptography / typer / py-key-value-aio[disk].
-    "bg-mcpcore[redis] @ git+https://github.com/bauer-group/LIB-BG-MCPCore.git@v1.4.0",
+    "bg-mcpcore[redis] @ git+https://github.com/bauer-group/LIB-BG-MCPCore.git@v1.6.0",
 
     # Directly imported by this server's own code (kept explicit; also provided
     # transitively by bg-mcpcore, so the version ranges stay compatible):
@@ -72,14 +72,12 @@ Issues = "https://github.com/bauer-group/IP-ZAMMAD-MCPServer/issues"
 bg-zammad-mcp = "main:app"
 
 # ── bg-mcpcore plugin seams ──────────────────────────────────────────────────
-# The custom Zammad OAuth2 inbound provider and the role-allowlist gate are
-# discovered config-driven by bg-mcpcore (keyed on AUTH_MODE=zammad), so no
-# wiring code is needed in this server's entrypoint.
+# The one remaining custom seam: the Zammad-as-IdP OAuth2 inbound provider,
+# discovered config-driven by bg-mcpcore (keyed on AUTH_MODE=zammad). The role
+# allowlist (now the declarative `access_control` profile block) and the per-user
+# on-behalf-of outbound resolver (now `per_user_token`) need no server code.
 [project.entry-points."bg_mcpcore.auth_providers"]
 zammad = "auth.zammad_oauth:build_zammad_oauth_provider"
-
-[project.entry-points."bg_mcpcore.auth_middleware"]
-zammad = "auth.role_middleware:build_role_middleware"
 
 # ── Hatch build configuration ──────────────────────────────────────────────
 # bg-mcpcore is pulled via a direct git reference (GitHub, not PyPI); hatchling

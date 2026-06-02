@@ -9,7 +9,14 @@
   },
   "auth": {
     "inbound": { "mode": "zammad" },
-    "outbound": { "type": "python", "resolver": "server:make_obo_resolver" }
+    "outbound": {
+      "type": "per_user_token",
+      "scheme": "Bearer",
+      "claims": ["upstream_access_token", "upstream_token", "zammad_access_token"],
+      "static_fallback_env": "ZAMMAD_API_TOKEN",
+      "static_fallback_template": "Token token={token}"
+    }
   },
-  "tools": { "source": "python", "register": "server:register" }
+  "tools": { "source": "python", "register": "server:register" },
+  "access_control": { "roles_claim": "roles" }
 }

@@ -23,12 +23,12 @@ Inbound trust model
   AUTH_JWT_SIGNING_KEY). MCP clients see a single, version-stable JWT
   shape regardless of which IdP they came from.
 * The Zammad-issued access token is stored encrypted in `client_storage`
-  keyed by the FastMCP JWT's JTI - this is what `upstream_token.py`
-  retrieves at tool-call time so the outbound Zammad call carries the
-  user's identity end-to-end.
+  keyed by the FastMCP JWT's JTI - this is what bg-mcpcore's `per_user_token`
+  outbound resolver retrieves at tool-call time so the outbound Zammad call
+  carries the user's identity end-to-end.
 * Tokens are validated at exchange time by hitting Zammad's
   `/api/v1/users/me` endpoint (cheap, returns 401 on invalid token,
-  returns the role set we need for the allowlist middleware anyway).
+  returns the role set the `access_control` gate matches against anyway).
 """
 
 from __future__ import annotations

@@ -1,17 +1,19 @@
 """Zammad MCP Server configuration — a bg-mcpcore ``BaseMcpSettings`` subclass.
 
 The cross-cutting settings (environment, transport, MCP identity, auth
-persistence, OIDC, rate limiting, observability) all come from
+persistence, OIDC, rate limiting, observability, AND the role allowlist / audit
+toggle — ``MCP_ALLOWED_ROLES`` / ``MCP_ROLE_CHECK_AUDIT_ONLY``) all come from
 ``bg_mcpcore.BaseMcpSettings``. This subclass adds only the Zammad-specific
-backend + OAuth2 + role fields, narrows ``auth_mode`` to the Zammad-supported
-set, and enforces the per-mode credential requirements (the universal
-fail-closed invariants — none-in-prod, JWT key, Fernet storage key — are
-already enforced in core, before ``validate_provider_auth`` runs).
+backend + OAuth2 fields, narrows ``auth_mode`` to the Zammad-supported set,
+overrides the role-allowlist default to Zammad's safer "Agents + Admins only",
+and enforces the per-mode credential requirements (the universal fail-closed
+invariants — none-in-prod, JWT key, Fernet storage key — run in core first).
 
 Two trust boundaries:
 - inbound (AI client -> MCP)   - OAuth 2.1 + PKCE via Zammad / external OIDC
-- outbound (MCP -> Zammad API) - per-user Bearer token (zammad mode) or a
-                                 static Token (oidc / none modes)
+- outbound (MCP -> Zammad API) - per-user Bearer (zammad mode) or a static Token
+                                 (oidc / none) — declared in the profile via the
+                                 ``per_user_token`` resolver, no longer code here.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from typing import Annotated, Literal
 from bg_mcpcore import BaseMcpSettings
 from bg_mcpcore.settings import get_settings as _core_get_settings
 from bg_mcpcore.settings.enums import Environment as Environment  # re-exported for callers
-from pydantic import Field, HttpUrl, SecretStr, field_validator
+from pydantic import Field, HttpUrl, SecretStr
 from pydantic_settings import NoDecode
 
 
@@ -44,15 +46,6 @@ class ZammadRole(StrEnum):
     CUSTOMER = "customer"
 
 
-def _split_csv(raw: object) -> list[str]:
-    """Parse a comma-separated env value into a list. Tolerates whitespace."""
-    if raw is None or raw == "":
-        return []
-    if isinstance(raw, list):
-        return [str(item).strip() for item in raw if str(item).strip()]
-    return [item.strip() for item in str(raw).split(",") if item.strip()]
-
-
 def _has_value(value: object) -> bool:
     if value is None:
         return False
@@ -71,6 +64,14 @@ class Settings(BaseMcpSettings):
 
     # This server's consent-screen name (the base leaves it required).
     mcp_display_name: str = "BAUER GROUP Zammad"
+
+    # Override the base's empty default: Zammad gates to Agents + Admins by
+    # default. The profile's ``access_control`` block activates the gate; CSV
+    # parsing of MCP_ALLOWED_ROLES + the audit toggle are inherited from the base.
+    mcp_allowed_roles: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["Admin", "Agent"],
+        description="Zammad role names allowed to use this MCP (case-insensitive).",
+    )
 
     # ── Zammad backend ───────────────────────────────────────────────────────
     zammad_url: HttpUrl = Field(
@@ -96,20 +97,7 @@ class Settings(BaseMcpSettings):
         description="Endpoint used to validate the upstream token + read the role set.",
     )
 
-    # ── Role-based MCP access ─────────────────────────────────────────────────
-    mcp_allowed_roles: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["Admin", "Agent"],
-        description="Zammad role names allowed to use this MCP (case-insensitive).",
-    )
-    mcp_role_check_audit_only: bool = False
-    mcp_role_cache_ttl_seconds: int = Field(default=60, ge=0, le=3600)
-
     # ── Validators ─────────────────────────────────────────────────────────────
-
-    @field_validator("mcp_allowed_roles", mode="before")
-    @classmethod
-    def _parse_csv_list(cls, value: object) -> list[str]:
-        return _split_csv(value)
 
     def validate_provider_auth(self) -> None:
         """Per-mode credential checks (core invariants already ran)."""
@@ -172,10 +160,6 @@ class Settings(BaseMcpSettings):
     @property
     def zammad_userinfo_url(self) -> str:
         return str(self.zammad_url).rstrip("/") + self.zammad_userinfo_path
-
-    @property
-    def allowed_roles_lower(self) -> set[str]:
-        return {role.strip().lower() for role in self.mcp_allowed_roles if role.strip()}
 
 
 def get_settings(force_reload: bool = False) -> Settings:

@@ -85,15 +85,17 @@ def test_oidc_without_api_token_rejected(clean_env) -> None:  # type: ignore[no-
         Settings()
 
 
-# ── role allowlist parsing ────────────────────────────────────────────────────
+# ── role allowlist (now inherited from the bg-mcpcore base; enforced by the
+#    declarative access_control gate, parsed by the base's CSV validator) ───────
 
 
 def test_allowed_roles_csv_parsing(base_none_env) -> None:  # type: ignore[no-untyped-def]
     base_none_env.setenv("MCP_ALLOWED_ROLES", "Admin, Agent ,Customer")
     settings = Settings()
-    assert settings.allowed_roles_lower == {"admin", "agent", "customer"}
+    assert settings.mcp_allowed_roles == ["Admin", "Agent", "Customer"]
 
 
 def test_allowed_roles_default(base_none_env) -> None:  # type: ignore[no-untyped-def]
+    # Zammad overrides the base's empty default with its safer Agents+Admins gate.
     settings = Settings()
-    assert settings.allowed_roles_lower == {"admin", "agent"}
+    assert settings.mcp_allowed_roles == ["Admin", "Agent"]
