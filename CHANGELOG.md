@@ -1,3 +1,9 @@
+## [0.1.4](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.3...v0.1.4) (2026-06-02)
+
+### ♻️ Refactoring
+
+* **zammad:** adopted declarative auth (access_control + per_user_token + request_json) ([dcfae93](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/dcfae93c3d65c53e50ea2c5085f244374020a078))
+
 ## [0.1.3](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.2...v0.1.3) (2026-06-01)
 
 ### ♻️ Refactoring
