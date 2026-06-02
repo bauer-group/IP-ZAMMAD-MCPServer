@@ -197,11 +197,9 @@ IP-ZAMMAD-MCPServer/
 │       │   ├── profiles/zammad.json ← declarative profile (backend, auth, tools)
 │       │   ├── main.py              ← entrypoint: make_cli(load_profile(...), Settings)
 │       │   ├── config.py            ← Settings(bg_mcpcore.BaseMcpSettings) + Zammad fields
-│       │   ├── server.py            ← Zammad seams: OBO resolver + tool decoding shim
+│       │   ├── server.py            ← the one Zammad seam: register() (decode shim → tool modules)
 │       │   ├── auth/
-│       │   │   ├── zammad_oauth.py  ← Zammad as OAuth2 IdP (auth_providers entry point)
-│       │   │   ├── role_middleware.py ← MCP_ALLOWED_ROLES gate (auth_middleware entry point)
-│       │   │   └── upstream_token.py ← resolves the user's upstream Zammad token
+│       │   │   └── zammad_oauth.py  ← Zammad as OAuth2 IdP (auth_providers entry point)
 │       │   ├── zammad/
 │       │   │   ├── errors.py        ← typed exception hierarchy
 │       │   │   └── tools/           ← hand-written tool surface (36 tools)
@@ -210,7 +208,11 @@ IP-ZAMMAD-MCPServer/
 │       │   └── static/
 │       │       ├── index.html       ← landing page served at /
 │       │       └── logo.svg         ← consent-screen brand asset
-│       └── tests/                   ← pytest (59 tests, gates the Docker build)
+│       └── tests/                   ← pytest (gates the Docker build)
+│
+│   The role gate (now the profile's `access_control` block) and the per-user
+│   on-behalf-of outbound auth (now the `per_user_token` resolver) are
+│   declarative in bg-mcpcore — no server code.
 │
 ├── docs/
 │   ├── ZAMMAD-MCP-SPEC.md           ← design specification

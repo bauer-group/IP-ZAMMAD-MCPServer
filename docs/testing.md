@@ -19,24 +19,23 @@ pip install ".[test]"
 pytest -v
 ```
 
-The suite (59 tests) covers the Zammad-specific surface:
+The suite covers the Zammad-specific surface:
 
 - **`test_config.py`** — the `Settings` subclass: per-`AUTH_MODE` credential
   validation (`validate_provider_auth`) on top of bg-mcpcore's universal
   fail-closed invariants (none-in-production, JWT signing key, Fernet storage
   key), plus role-allowlist parsing and the Zammad URL accessors.
-- **`test_upstream_token.py`** — the upstream-token resolver: every lookup path
-  (embedded claims, storage by JTI, storage by sub) and the fail-closed raise
-  when no token is available.
-- **`test_role_middleware.py`** — the role-allowlist gate: passes / denies /
-  audit-only / empty allowlist / role-name shape variations.
 - **`test_zammad_errors.py`** — the typed exception hierarchy mapped from
   Zammad's JSON error bodies (raised by the tool decoding shim on non-2xx).
 
+The per-user on-behalf-of resolver (`per_user_token`) and the role/claim gate
+(`access_control`) are now bg-mcpcore building blocks, tested once in
+**bg-mcpcore's own suite** — this server consumes them via the profile.
+
 ```text
 $ pytest -q
-...........................................................   [100%]
-59 passed
+........................                                      [100%]
+24 passed
 ```
 
 **Test-gated Docker builds:** the Dockerfile's production stage `COPY --from=test`

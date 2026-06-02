@@ -16,22 +16,18 @@ declarative-profile + CLI surface. Only the Zammad-specific parts live here:
 
 ```text
 src/
-  profiles/zammad.json   Declarative profile: backend, auth wiring, tool source
+  profiles/zammad.json   Declarative profile: backend, inbound mode, the
+                         `per_user_token` outbound resolver, the `access_control`
+                         role gate, and the python tool source
   main.py                4-line entrypoint — make_cli(load_profile(...), Settings)
   config.py              Settings(bg_mcpcore.BaseMcpSettings) — only the Zammad
-                         backend / OAuth2 / role fields + per-mode validation
-  server.py              The two Zammad seams referenced by the profile:
-                           make_obo_resolver  outbound per-user on-behalf-of
-                                              AuthHeaderSource (Token vs Bearer,
-                                              fail-closed)
-                           register           decoding shim -> the tool modules
-                                              (so they stay unchanged)
+                         backend / OAuth2 fields + per-mode validation
+  server.py              The one Zammad seam: register() wraps bg-mcpcore's
+                         ctx.request_json with Zammad's typed-error factory and
+                         registers the eight hand-written tool modules
   auth/
     zammad_oauth.py      Zammad as OAuth2 provider
                          (entry point: bg_mcpcore.auth_providers = zammad)
-    role_middleware.py   Role-allowlist gate (Admin / Agent / Customer)
-                         (entry point: bg_mcpcore.auth_middleware = zammad)
-    upstream_token.py    Resolve the user's Zammad bearer token (fail-closed)
   zammad/
     errors.py            Typed exception hierarchy (raised by the shim on non-2xx)
     tools/
@@ -49,6 +45,10 @@ src/
     logo.svg             Consent-screen brand asset served at /logo.svg
 ```
 
+The role allowlist (now the profile's `access_control` block + `MCP_ALLOWED_ROLES`)
+and the per-user on-behalf-of outbound auth (now the `per_user_token` resolver)
+are declarative in bg-mcpcore — no longer server code here.
+
 The CLI exposes a single `serve` command (the default). Container liveness uses
 the unauthenticated `/healthz` route — there is no longer a `health` / `probe` /
 `tools` subcommand.
@@ -57,7 +57,8 @@ the unauthenticated `/healthz` route — there is no longer a `health` / `probe`
 
 - **Inbound** (AI client -> MCP) — OAuth 2.1 + PKCE via Zammad (or external OIDC)
 - **Outbound** (MCP -> Zammad) — the user's Zammad bearer token (or a static
-  API token in `oidc`/`none` modes)
+  `Token token=<api_token>` in `oidc`/`none` modes), via the declarative
+  `per_user_token` resolver
 
 In `zammad` mode the user's identity is preserved end-to-end: every Zammad
 API call happens in the context of the authenticated user, so Zammad's own

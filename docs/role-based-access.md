@@ -54,26 +54,19 @@ Zammad admin's Roles list.
 2. The MCP server calls `${ZAMMAD_URL}/api/v1/users/me` with that token
    to validate it. The response includes the user's role names.
 3. The role names are attached to the FastMCP-issued JWT's claims.
-4. On every JSON-RPC request, `RoleAllowlistMiddleware` reads the claims
-   and compares the user's roles against `MCP_ALLOWED_ROLES`.
+4. On every JSON-RPC request, bg-mcpcore's `access_control` gate (activated by
+   the profile's `access_control` block) reads the claims and compares the
+   user's roles against `MCP_ALLOWED_ROLES`.
 5. Match → request passes through. No match → request is rejected with
    `PermissionError`.
 
-### Effect of the cache
+### When role changes take effect
 
-`MCP_ROLE_CACHE_TTL_SECONDS` controls how often the `/users/me` response
-is refreshed for a given upstream token (default 60s).
-
-| Setting | Behaviour |
-| --- | --- |
-| `60` (default) | Role changes in Zammad take effect within 60 seconds for an active MCP session. |
-| `0` | No caching — every MCP request triggers a `/users/me` call. Use when role changes must apply immediately, at the cost of one extra Zammad HTTP roundtrip per MCP call. |
-| `3600` (1h) | Less Zammad load, but a demoted user may keep MCP access for up to an hour. |
-
-The cache is per upstream token, so revoking the token in Zammad (User
-Profile → Token Access → Revoke) immediately ends MCP access regardless
-of the cache TTL — the next refresh attempt fails, and the MCP client is
-forced to re-authenticate.
+The role set is captured from `/users/me` at login (step 2) and attached to the
+FastMCP-issued JWT, so it is fixed for the lifetime of that session. A user whose
+Zammad roles change picks up the new set on the next authentication. Revoking the
+upstream token in Zammad (User Profile → Token Access → Revoke) ends MCP access
+at the next token refresh — the refresh fails and the client must re-authenticate.
 
 ## Audit-only mode
 

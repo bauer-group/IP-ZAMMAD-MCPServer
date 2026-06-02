@@ -204,9 +204,11 @@ A: Set `ZAMMAD_URL=https://intranet.example.com/zammad` and adjust
 `ZAMMAD_USERINFO_PATH=/api/v1/users/me` to keep them sub-path-relative.
 The MCP server concatenates them onto `ZAMMAD_URL`.
 
-**Q: Does the MCP server cache /users/me responses?**
-A: Yes, for `MCP_ROLE_CACHE_TTL_SECONDS` seconds (default 60). Role
-changes propagate within that window. Set to `0` to disable caching.
+**Q: When do Zammad role changes take effect for an active session?**
+A: The role set is captured from `/users/me` at login and attached to the
+FastMCP-issued JWT, so it is fixed for that session. A user picks up changed
+roles on the next authentication; revoking the upstream token in Zammad ends
+access at the next token refresh.
 
 **Q: Can I use both AUTH_MODE=zammad and a fallback ZAMMAD_API_TOKEN?**
 A: Yes. If the upstream-token lookup fails (storage corruption, expired
