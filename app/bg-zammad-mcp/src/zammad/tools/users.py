@@ -9,22 +9,26 @@ Endpoints (all under /api/v1/):
   POST /users                       create
   PUT  /users/{id}                  update
 
-`get_me` is always allowed regardless of role - every Zammad user can read
-their own profile, and it's the only way for an MCP client to verify which
-identity it's operating as.
+`get_me` returns the caller's own profile - the canonical way for an MCP
+client to verify which Zammad identity it is operating as. Note: like every
+tool it is subject to the MCP role allowlist (MCP_ALLOWED_ROLES); a caller
+whose roles are not on the allowlist is rejected before any tool runs.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from . import ToolContext
 
+if TYPE_CHECKING:
+    from fastmcp import FastMCP
 
-def register(mcp: Any, ctx: ToolContext) -> int:
+
+def register(mcp: FastMCP, ctx: ToolContext) -> int:
     @mcp.tool(
         name="get_me",
         description=(

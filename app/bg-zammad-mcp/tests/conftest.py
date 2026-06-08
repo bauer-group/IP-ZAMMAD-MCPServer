@@ -55,7 +55,6 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
         "ZAMMAD_API_TOKEN",
         "ZAMMAD_HTTP_TIMEOUT",
         "ZAMMAD_VERIFY_TLS",
-        "ZAMMAD_VERSION_HINT",
         # MCP transport
         "MCP_TRANSPORT",
         "MCP_HOST",

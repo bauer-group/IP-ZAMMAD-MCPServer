@@ -19,7 +19,7 @@ Two trust boundaries:
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated
 
 from bg_mcpcore import BaseMcpSettings
 from bg_mcpcore.settings import get_settings as _core_get_settings
@@ -84,7 +84,6 @@ class Settings(BaseMcpSettings):
     )
     zammad_http_timeout: int = Field(default=30, ge=1, le=300)
     zammad_verify_tls: bool = True
-    zammad_version_hint: Literal["auto", "v6", "v7"] = "auto"
 
     # ── Zammad OAuth2 (AUTH_MODE=zammad) ──────────────────────────────────────
     zammad_oauth_client_id: str | None = None

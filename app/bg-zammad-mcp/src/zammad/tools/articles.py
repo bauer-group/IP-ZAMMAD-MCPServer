@@ -9,15 +9,18 @@ Endpoints (all under /api/v1/):
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from . import ToolContext
 
+if TYPE_CHECKING:
+    from fastmcp import FastMCP
 
-def register(mcp: Any, ctx: ToolContext) -> int:
+
+def register(mcp: FastMCP, ctx: ToolContext) -> int:
     @mcp.tool(
         name="list_ticket_articles",
         description=(

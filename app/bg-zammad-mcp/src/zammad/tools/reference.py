@@ -6,21 +6,24 @@ Reference-data tools - lookup tables that change rarely.
   GET /roles              list all roles  (Admin / Agent / Customer / custom)
   GET /version            Zammad version (also used by the v6/v7 probe)
 
-These are all read-only and not gated by the role allowlist - any
-authenticated user can resolve a state-name from an ID. Zammad will,
-however, hide custom states / priorities that the caller's role can't see.
+These are all read-only. Like every tool they pass through the MCP role
+allowlist (MCP_ALLOWED_ROLES) first; beyond that, Zammad hides custom
+states / priorities that the caller's role can't see.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mcp.types import ToolAnnotations
 
 from . import ToolContext
 
+if TYPE_CHECKING:
+    from fastmcp import FastMCP
 
-def register(mcp: Any, ctx: ToolContext) -> int:
+
+def register(mcp: FastMCP, ctx: ToolContext) -> int:
     read_only = ToolAnnotations(
         readOnlyHint=True, destructiveHint=False, openWorldHint=True
     )
