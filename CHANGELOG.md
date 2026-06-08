@@ -1,3 +1,13 @@
+## [0.1.5](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.4...v0.1.5) (2026-06-08)
+
+### 🐛 Bug Fixes
+
+* **zammad:** honoured ZAMMAD_VERIFY_TLS and ZAMMAD_HTTP_TIMEOUT outbound ([b2a3a90](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/b2a3a9094f2abd0cddfd70df9cc1090a0d17edf6))
+
+### ♻️ Refactoring
+
+* **zammad:** typed tool-register seam and dropped dead config ([e769b7c](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/e769b7c4873b42a8d1ebdcb82fc10ee097ec4850))
+
 ## [0.1.4](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.3...v0.1.4) (2026-06-02)
 
 ### ♻️ Refactoring
