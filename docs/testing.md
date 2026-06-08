@@ -7,7 +7,7 @@ bg-mcpcore's own suite**. The tests here cover only the Zammad-specific seams.
 
 | Layer | Tool | Purpose |
 | --- | --- | --- |
-| **Unit / integration** | `pytest` | Settings validation, the per-user on-behalf-of token resolver, the role-allowlist gate, the typed error mapping. Runs in the Docker test stage. |
+| **Unit / integration** | `pytest` | Settings validation, the Zammad OAuth2 userinfo token verifier, and the typed error mapping. Runs in the Docker test stage. |
 | **End-to-end** | MCP Inspector | Drives the full OAuth flow and exercises tools against a live Zammad. |
 | **Local smoke** | `AUTH_MODE=none` | Run the whole stack unauthenticated against a real Zammad for iteration. |
 
@@ -27,6 +27,11 @@ The suite covers the Zammad-specific surface:
   key), plus role-allowlist parsing and the Zammad URL accessors.
 - **`test_zammad_errors.py`** — the typed exception hierarchy mapped from
   Zammad's JSON error bodies (raised by the tool decoding shim on non-2xx).
+- **`test_zammad_oauth.py`** — the Zammad OAuth2 userinfo token verifier
+  (`_ZammadUserInfoVerifier.verify_token`): the success path (claim mapping,
+  including the `upstream_access_token` claim the `per_user_token` resolver
+  consumes) plus every rejection branch (401, 5xx, unexpected status,
+  non-JSON body, missing id, network error → `None`, never raise).
 
 The per-user on-behalf-of resolver (`per_user_token`) and the role/claim gate
 (`access_control`) are now bg-mcpcore building blocks, tested once in
@@ -34,8 +39,8 @@ The per-user on-behalf-of resolver (`per_user_token`) and the role/claim gate
 
 ```text
 $ pytest -q
-........................                                      [100%]
-24 passed
+................................                              [100%]
+32 passed
 ```
 
 **Test-gated Docker builds:** the Dockerfile's production stage `COPY --from=test`

@@ -87,12 +87,12 @@ to `false`.
 | `AUTH_MODE` | Allowlist enforced? | Why |
 | --- | --- | --- |
 | `zammad` | **Yes** | Zammad token verification populates `roles` in the JWT claims. |
-| `oidc` | No (no-op) | External OIDC tokens carry no Zammad role info. The middleware isn't wired in this mode. |
+| `oidc` | No (no-op) | External OIDC tokens carry no Zammad role info, so the gate finds no `roles` claim and passes through. The middleware is still wired — just inert. |
 | `none` | No (no-op) | No authenticated user; nothing to check. |
 
 In modes where the allowlist is a no-op, Zammad's own permission system
 still enforces fine-grained access on every API call. The allowlist
-exists only as a coarse coarse filter, never the sole defence.
+exists only as a coarse filter, never the sole defence.
 
 ## Sample log entries
 
