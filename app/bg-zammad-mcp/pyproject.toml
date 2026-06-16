@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bg-zammad-mcp"
-version = "0.1.6"
+version = "0.1.7"
 description = "BAUER GROUP Zammad MCP Server — OAuth2-gated remote MCP bridge for self-hosted Zammad (v6.x / v7.x)"
 readme = "README.md"
 license = { text = "MIT" }
