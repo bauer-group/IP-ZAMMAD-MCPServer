@@ -44,7 +44,7 @@ dependencies = [
     "httpx>=0.28.1,<1.0.0",         # the Zammad OAuth2 userinfo verifier
     "pydantic>=2.10.0,<3.0.0",      # Settings fields
     "pydantic-settings>=2.14.1,<3.0.0",  # NoDecode on the role CSV field
-    "structlog>=24.4.0,<26.0.0",    # structured logging in tools / auth / server
+    "structlog>=24.4.0,<27.0.0",    # structured logging in tools / auth / server
 
     # Optional error tracking — loaded lazily by bg-mcpcore, controlled by SENTRY_DSN.
     "sentry-sdk>=2.18.0,<3.0.0",
