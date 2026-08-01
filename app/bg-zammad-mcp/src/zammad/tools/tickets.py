@@ -2,7 +2,7 @@
 Ticket tools - the core of the Zammad MCP surface.
 
 Endpoints exercised (all under /api/v1/):
-  GET    /tickets                          paginated list
+  GET    /tickets                          paginated list (ID ascending!)
   GET    /tickets/search?query=...         full-text search
   GET    /tickets/{id}                     get one
   POST   /tickets                          create
@@ -12,18 +12,28 @@ Endpoints exercised (all under /api/v1/):
 All tools forward the authenticated user's bearer token, so Zammad's own
 permission system gates which tickets the caller can see / edit / delete.
 
+Pagination
+----------
+Zammad computes ``offset = (page - 1) * limit`` and defaults ``page`` to 1
+(``CanPaginate::Pagination``). A tool that sends only ``limit`` is therefore
+structurally pinned to the first page - it can never reach result 26. Every
+list/search tool here sends ``page`` explicitly, and requests
+``with_total_count`` so the caller can tell "25 matches" from "25 of 4000".
+
 Hint annotations
 ----------------
-Read-only tools (`list_*`, `search_*`, `get_*`) are marked
-`readOnlyHint=True` so MCP clients can auto-run them without prompting.
-Mutating tools are marked `destructiveHint=True`; `delete_ticket` is
-flagged as well as `idempotentHint=False` for emphasis.
+Read-only tools (`list_*`, `search_*`, `get_*`) are marked `readOnlyHint=True`
+so MCP clients can auto-run them without prompting. Per the MCP spec,
+`destructiveHint` means "may perform destructive updates" - it is therefore
+False for `create_ticket` (purely additive) and True only for `update_ticket`
+(overwrites existing field values) and `delete_ticket`.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Any
 
+from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
@@ -32,15 +42,22 @@ from . import ToolContext
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
+# Zammad's own server-side ceiling: paginate_with(max: 200, default: 50) on the
+# search endpoints, paginate_with(max: 100) on the plain index.
+SEARCH_MAX_LIMIT = 200
+INDEX_MAX_PER_PAGE = 100
+
 
 def register(mcp: FastMCP, ctx: ToolContext) -> int:
-    """Register ticket tools and return the count."""
-
     @mcp.tool(
         name="list_tickets",
         description=(
-            "List Zammad tickets, paginated. Returns the most recent tickets first "
-            "by default. Use `search_tickets` for full-text filtering."
+            "List Zammad tickets, paginated. NOTE: Zammad returns these in "
+            "ascending ID order - OLDEST FIRST - and the endpoint accepts no "
+            "sort parameter. To find recent or relevant tickets use "
+            "`search_tickets`; to see an agent's actual worklist use the "
+            "ticket overviews. This tool is mainly useful for exhaustive "
+            "enumeration."
         ),
         annotations=ToolAnnotations(
             readOnlyHint=True, destructiveHint=False, openWorldHint=True
@@ -49,7 +66,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     async def list_tickets(
         page: Annotated[int, Field(ge=1, description="1-indexed page number")] = 1,
         per_page: Annotated[
-            int, Field(ge=1, le=100, description="Items per page (max 100)")
+            int,
+            Field(ge=1, le=INDEX_MAX_PER_PAGE, description="Items per page (max 100)"),
         ] = 25,
         expand: Annotated[
             bool,
@@ -65,9 +83,15 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     @mcp.tool(
         name="search_tickets",
         description=(
-            "Full-text search Zammad tickets. The query supports Zammad's "
-            "Lucene-like search syntax (e.g. `state:open priority:3 normal`, "
-            "`owner.email:agent@example.com`, `created_at:>=now-7d`)."
+            "Full-text search Zammad tickets. IMPORTANT: field-scoped queries "
+            "like `state.name:open`, `owner.email:a@b.c` or "
+            "`created_at:>=now-7d` only work when the Zammad instance runs "
+            "Elasticsearch. Without it Zammad falls back to a plain SQL LIKE "
+            "over title and number, so a field-scoped query returns an EMPTY "
+            "list rather than an error - if a search you expected to match "
+            "comes back empty, retry with plain keywords before concluding "
+            "there are no such tickets. Results are paginated: pass `page` to "
+            "go beyond the first `limit` results."
         ),
         annotations=ToolAnnotations(
             readOnlyHint=True, destructiveHint=False, openWorldHint=True
@@ -75,19 +99,35 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     )
     async def search_tickets(
         query: Annotated[str, Field(min_length=1, description="Zammad search query")],
-        limit: Annotated[int, Field(ge=1, le=100)] = 25,
+        page: Annotated[int, Field(ge=1, description="1-indexed page number")] = 1,
+        limit: Annotated[
+            int, Field(ge=1, le=SEARCH_MAX_LIMIT, description="Results per page (max 200)")
+        ] = 25,
         sort_by: Annotated[
             str | None,
             Field(description="Sort field, e.g. 'created_at' or 'updated_at'"),
         ] = None,
         order_by: Annotated[str | None, Field(description="'asc' or 'desc'")] = None,
         expand: Annotated[bool, Field(description="Inline names instead of IDs")] = True,
+        with_total_count: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Include the total number of matches so you can tell a "
+                    "complete result from a truncated one. Wraps the response "
+                    "in an object with a total_count field."
+                )
+            ),
+        ] = True,
     ) -> Any:
         params: dict[str, Any] = {
             "query": query,
+            "page": page,
             "limit": limit,
             "expand": str(expand).lower(),
         }
+        if with_total_count:
+            params["with_total_count"] = "true"
         if sort_by:
             params["sort_by"] = sort_by
         if order_by:
@@ -116,12 +156,15 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         description=(
             "Create a new Zammad ticket. Requires `title`, `group` (group name "
             "or ID), `customer` (customer e-mail or user ID), and an initial "
-            "`article` body. Other fields are optional but commonly useful: "
-            "`priority_id`, `state_id`, `owner_id`, `type`, `tags`."
+            "`article_body`. The opening article is customer-visible by "
+            "default, matching how a ticket raised by a customer looks - set "
+            "`article_internal=true` for a ticket you are raising purely for "
+            "internal tracking. Other useful fields: `priority_id`, "
+            "`state_id`, `owner_id`, `ticket_type`, `tags`."
         ),
         annotations=ToolAnnotations(
             readOnlyHint=False,
-            destructiveHint=True,
+            destructiveHint=False,  # additive: creates a new ticket
             idempotentHint=False,
             openWorldHint=True,
         ),
@@ -142,20 +185,31 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             str,
             Field(
                 description=(
-                    "Article type: 'note' (internal), 'email' (out-/inbound), "
-                    "'phone', 'web', 'chat'. Defaults to 'note'."
+                    "How the request arrived: 'note' (default), 'email', "
+                    "'phone', 'web', 'chat'."
                 )
             ),
         ] = "note",
         article_internal: Annotated[
-            bool, Field(description="If True, article is hidden from customers")
-        ] = True,
+            bool,
+            Field(
+                description=(
+                    "Hide the opening article from the customer. Defaults to "
+                    "false (customer-visible)."
+                )
+            ),
+        ] = False,
         priority_id: Annotated[int | None, Field(ge=1)] = None,
         state_id: Annotated[int | None, Field(ge=1)] = None,
         owner_id: Annotated[int | None, Field(ge=1)] = None,
         ticket_type: Annotated[
             str | None,
-            Field(alias="type", description="Free-form ticket type label"),
+            Field(
+                description=(
+                    "Free-form TICKET type label (an Object-Manager field, "
+                    "unrelated to article_type)."
+                )
+            ),
         ] = None,
         tags: Annotated[
             str | None,
@@ -189,11 +243,11 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         description=(
             "Update fields on an existing Zammad ticket. Only the supplied "
             "fields are changed; omit a field to leave it untouched. To add "
-            "a reply or note, use `create_ticket_article` instead."
+            "a reply or note, use `reply_to_customer` / `add_internal_note`."
         ),
         annotations=ToolAnnotations(
             readOnlyHint=False,
-            destructiveHint=True,
+            destructiveHint=True,  # overwrites existing field values
             idempotentHint=True,
             openWorldHint=True,
         ),
@@ -206,7 +260,9 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         owner_id: Annotated[int | None, Field(ge=1)] = None,
         group_id: Annotated[int | None, Field(ge=1)] = None,
         customer_id: Annotated[int | None, Field(ge=1)] = None,
-        ticket_type: Annotated[str | None, Field(alias="type")] = None,
+        ticket_type: Annotated[
+            str | None, Field(description="Free-form ticket type label")
+        ] = None,
     ) -> Any:
         payload: dict[str, Any] = {}
         if title is not None:
@@ -224,7 +280,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         if ticket_type is not None:
             payload["type"] = ticket_type
         if not payload:
-            raise ValueError("update_ticket called with no fields to update")
+            raise ToolError(
+                "update_ticket needs at least one field to change. Pass e.g. "
+                "state_id, priority_id or owner_id."
+            )
         return await ctx.request("PUT", f"/tickets/{ticket_id}", json=payload)
 
     @mcp.tool(

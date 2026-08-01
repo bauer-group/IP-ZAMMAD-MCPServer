@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Any
 
+from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
@@ -26,6 +27,9 @@ from . import ToolContext
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
+# Zammad's server-side ceiling on the /search endpoints.
+SEARCH_MAX_LIMIT = 200
 
 
 def register(mcp: FastMCP, ctx: ToolContext) -> int:
@@ -78,7 +82,9 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         name="search_users",
         description=(
             "Search Zammad users by name, e-mail, login, or other indexed "
-            "fields. Same query syntax as `search_tickets`."
+            "fields. Same query syntax - and the same Elasticsearch caveat - "
+            "as `search_tickets`. Pass `page` to go beyond the first `limit` "
+            "results."
         ),
         annotations=ToolAnnotations(
             readOnlyHint=True, destructiveHint=False, openWorldHint=True
@@ -86,18 +92,24 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     )
     async def search_users(
         query: Annotated[str, Field(min_length=1)],
-        limit: Annotated[int, Field(ge=1, le=100)] = 25,
+        page: Annotated[int, Field(ge=1, description="1-indexed page number")] = 1,
+        limit: Annotated[
+            int, Field(ge=1, le=SEARCH_MAX_LIMIT, description="Results per page (max 200)")
+        ] = 25,
         expand: Annotated[bool, Field(description="Inline role names")] = True,
+        with_total_count: Annotated[
+            bool, Field(description="Include the total match count alongside the page")
+        ] = True,
     ) -> Any:
-        return await ctx.request(
-            "GET",
-            "/users/search",
-            params={
-                "query": query,
-                "limit": limit,
-                "expand": str(expand).lower(),
-            },
-        )
+        params: dict[str, Any] = {
+            "query": query,
+            "page": page,
+            "limit": limit,
+            "expand": str(expand).lower(),
+        }
+        if with_total_count:
+            params["with_total_count"] = "true"
+        return await ctx.request("GET", "/users/search", params=params)
 
     @mcp.tool(
         name="get_user",
@@ -126,7 +138,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ),
         annotations=ToolAnnotations(
             readOnlyHint=False,
-            destructiveHint=True,
+            destructiveHint=False,  # additive
             idempotentHint=False,
             openWorldHint=True,
         ),
@@ -152,7 +164,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         active: Annotated[bool, Field(description="User is active (can log in)")] = True,
     ) -> Any:
         if not (email or (firstname and lastname) or login):
-            raise ValueError(
+            raise ToolError(
                 "create_user requires at least `email`, `login`, or both "
                 "`firstname` and `lastname`"
             )
@@ -215,7 +227,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         if active is not None:
             payload["active"] = active
         if not payload:
-            raise ValueError("update_user called with no fields to update")
+            raise ToolError(
+                "update_user needs at least one field to change. Pass e.g. "
+                "email, phone, organization_id or active."
+            )
         return await ctx.request("PUT", f"/users/{user_id}", json=payload)
 
     return 6

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Any
 
+from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
@@ -20,6 +21,9 @@ from . import ToolContext
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
+# Zammad's server-side ceiling on the /search endpoints.
+SEARCH_MAX_LIMIT = 200
 
 
 def register(mcp: FastMCP, ctx: ToolContext) -> int:
@@ -47,25 +51,35 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
 
     @mcp.tool(
         name="search_organizations",
-        description="Search Zammad organizations by name or domain.",
+        description=(
+            "Search Zammad organizations by name or domain. Same Elasticsearch "
+            "caveat as `search_tickets`. Pass `page` to go beyond the first "
+            "`limit` results."
+        ),
         annotations=ToolAnnotations(
             readOnlyHint=True, destructiveHint=False, openWorldHint=True
         ),
     )
     async def search_organizations(
         query: Annotated[str, Field(min_length=1)],
-        limit: Annotated[int, Field(ge=1, le=100)] = 25,
+        page: Annotated[int, Field(ge=1, description="1-indexed page number")] = 1,
+        limit: Annotated[
+            int, Field(ge=1, le=SEARCH_MAX_LIMIT, description="Results per page (max 200)")
+        ] = 25,
         expand: Annotated[bool, Field()] = True,
+        with_total_count: Annotated[
+            bool, Field(description="Include the total match count alongside the page")
+        ] = True,
     ) -> Any:
-        return await ctx.request(
-            "GET",
-            "/organizations/search",
-            params={
-                "query": query,
-                "limit": limit,
-                "expand": str(expand).lower(),
-            },
-        )
+        params: dict[str, Any] = {
+            "query": query,
+            "page": page,
+            "limit": limit,
+            "expand": str(expand).lower(),
+        }
+        if with_total_count:
+            params["with_total_count"] = "true"
+        return await ctx.request("GET", "/organizations/search", params=params)
 
     @mcp.tool(
         name="get_organization",
@@ -92,7 +106,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ),
         annotations=ToolAnnotations(
             readOnlyHint=False,
-            destructiveHint=True,
+            destructiveHint=False,  # additive
             idempotentHint=False,
             openWorldHint=True,
         ),
@@ -158,7 +172,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         if shared is not None:
             payload["shared"] = shared
         if not payload:
-            raise ValueError("update_organization called with no fields to update")
+            raise ToolError(
+                "update_organization needs at least one field to change. Pass "
+                "e.g. name, domain, note or active."
+            )
         return await ctx.request("PUT", f"/organizations/{organization_id}", json=payload)
 
     return 5

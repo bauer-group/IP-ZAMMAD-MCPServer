@@ -52,7 +52,11 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
 
     @mcp.tool(
         name="list_all_tags",
-        description="Enumerate all tags defined in this Zammad instance.",
+        description=(
+            "Enumerate every tag defined in this Zammad instance. NOTE: this "
+            "is an admin route (`admin.tag`) and returns 403 for a plain "
+            "agent - use `search_tags` instead, which any agent may call."
+        ),
         annotations=ToolAnnotations(
             readOnlyHint=True, destructiveHint=False, openWorldHint=True
         ),
@@ -80,7 +84,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ),
         annotations=ToolAnnotations(
             readOnlyHint=False,
-            destructiveHint=True,
+            destructiveHint=False,  # additive: attaches a tag, removes nothing
             idempotentHint=True,
             openWorldHint=True,
         ),

@@ -44,7 +44,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         description="Mark every online notification for the current user as read.",
         annotations=ToolAnnotations(
             readOnlyHint=False,
-            destructiveHint=True,
+            destructiveHint=False,  # only touches the caller's own read flags
             idempotentHint=True,
             openWorldHint=True,
         ),
@@ -58,7 +58,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         description="Mark a single online notification as read or unread.",
         annotations=ToolAnnotations(
             readOnlyHint=False,
-            destructiveHint=True,
+            destructiveHint=False,  # only touches the caller's own read flag
             idempotentHint=True,
             openWorldHint=True,
         ),
@@ -98,7 +98,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ),
         annotations=ToolAnnotations(
             readOnlyHint=False,
-            destructiveHint=True,
+            destructiveHint=False,  # additive: adds a subscription
             idempotentHint=True,
             openWorldHint=True,
         ),
