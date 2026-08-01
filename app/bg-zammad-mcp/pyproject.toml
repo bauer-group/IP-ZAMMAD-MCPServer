@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "bg-zammad-mcp"
 version = "0.1.10"
-description = "BAUER GROUP Zammad MCP Server — OAuth2-gated remote MCP bridge for self-hosted Zammad (v6.x / v7.x)"
+description = "BAUER GROUP Zammad MCP Server — OAuth2-gated remote MCP bridge for self-hosted Zammad 7.x"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
     { name = "Karl Bauer", email = "karl.bauer@bauer-group.com" },
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 
 keywords = ["mcp", "zammad", "oauth", "fastmcp", "helpdesk", "ticketing", "ai", "claude"]
 
@@ -21,7 +21,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Internet :: WWW/HTTP",
     "Topic :: Office/Business :: Groupware",
@@ -35,7 +34,11 @@ dependencies = [
     # [redis] extra adds the RedisStore backend for the OAuth-state store.
     # bg-mcpcore transitively provides fastmcp / pydantic / pydantic-settings /
     # structlog / rich / cryptography / typer / py-key-value-aio[disk].
-    "bg-mcpcore[redis] @ git+https://github.com/bauer-group/LIB-BG-MCPCore.git@v1.6.0",
+    #
+    # Pinned to an immutable COMMIT SHA rather than a tag: tags can be force-moved,
+    # and Dependabot's pip ecosystem cannot see PEP 508 VCS references at all, so
+    # nothing else watches this dependency. Bump it deliberately.
+    "bg-mcpcore[redis] @ git+https://github.com/bauer-group/LIB-BG-MCPCore.git@582a8fd9214824e732d57cf4d62b9f88d6a47b5a",
 
     # Directly imported by this server's own code (kept explicit; also provided
     # transitively by bg-mcpcore, so the version ranges stay compatible):
@@ -53,7 +56,6 @@ dependencies = [
 test = [
     "pytest>=8.3.0,<10.0.0",
     "pytest-asyncio>=0.24.0,<2.0.0",
-    "pytest-httpx>=0.35.0,<1.0.0",
     "pytest-cov>=6.0.0,<8.0.0",
     "respx>=0.22.0,<1.0.0",
 ]

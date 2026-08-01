@@ -16,7 +16,7 @@ work — never expose the resulting endpoint on a network.
 You set `AUTH_MODE=zammad` but didn't fill in the Zammad-side OAuth2
 Application credentials.
 
-**Fix:** in Zammad, **Admin → Manage → OAuth2 Applications → Add**.
+**Fix:** in Zammad, **Admin → System → API → Applications → New Application**.
 Copy the generated client ID and secret into `.env`. See
 [authentication.md → Mode 1](./authentication.md#mode-1--zammad-as-oauth2-provider-recommended).
 
@@ -49,7 +49,7 @@ what the MCP server sends. Common offenders:
 - HTTP vs HTTPS.
 - Stale value from before a hostname change.
 
-**Fix:** in Zammad **Admin → Manage → OAuth2 Applications**, open the
+**Fix:** in Zammad **Admin → System → API → Applications**, open the
 app and confirm the Redirect URI is **exactly**
 `${PUBLIC_BASE_URL}/auth/callback`, including scheme and no trailing
 slash.
@@ -166,7 +166,7 @@ Switch to `LOG_FORMAT=console` for human-readable Rich output during dev.
 
 You can't retrieve it — Zammad shows it once and stores only a hash.
 
-**Fix:** in Zammad, **Admin → Manage → OAuth2 Applications**, open the
+**Fix:** in Zammad, **Admin → System → API → Applications**, open the
 app, click **Regenerate Secret**. The old secret stops working
 immediately. Update `.env` and restart the MCP container.
 

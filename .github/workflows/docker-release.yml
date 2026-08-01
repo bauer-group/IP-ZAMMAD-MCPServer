@@ -46,12 +46,12 @@ jobs:
       env-file: '.env.example'
       validate-services: '["zammad-mcp", "redis"]'
 
-  validate-scripts:
-    name: 🔍 Validate Shell Scripts
-    uses: bauer-group/automation-templates/.github/workflows/modules-validate-shellscript.yml@main
-    with:
-      scan-directory: '.'
-      severity: 'error'
+  # The Python gate: ruff + mypy --strict + pytest with coverage enforced.
+  # Listed in the release job's `needs` below, so no tag, GitHub Release or
+  # CHANGELOG entry can be cut while the suite is red.
+  quality:
+    name: 🧪 Tests
+    uses: ./.github/workflows/tests.yml
 
   # ============================================
   # Release Job (only on main branch push)
@@ -59,11 +59,11 @@ jobs:
 
   release:
     name: 📦 Create Semantic Release
-    needs: [validate-compose, validate-scripts]
+    needs: [validate-compose, quality]
     if: |
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       needs.validate-compose.result == 'success' &&
-      needs.validate-scripts.result == 'success'
+      needs.quality.result == 'success'
     uses: bauer-group/automation-templates/.github/workflows/modules-semantic-release.yml@main
     with:
       target-branch: 'main'
@@ -100,7 +100,7 @@ jobs:
 
       push: true
 
-      security-scan: false
+      security-scan: true
       security-fail-on: 'CRITICAL'
       generate-sbom: true
       sync-dockerhub-readme: true
@@ -108,11 +108,11 @@ jobs:
 
   docker-build-bg-zammad-mcp-pr:
     name: 🔨 Validate bg-zammad-mcp Build (PR)
-    needs: [validate-compose, validate-scripts]
+    needs: [validate-compose, quality]
     if: |
       github.event_name == 'pull_request' &&
       needs.validate-compose.result == 'success' &&
-      needs.validate-scripts.result == 'success'
+      needs.quality.result == 'success'
     uses: bauer-group/automation-templates/.github/workflows/docker-build.yml@main
     with:
       publish-to: 'ghcr'

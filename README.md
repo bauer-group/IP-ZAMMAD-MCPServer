@@ -1,14 +1,14 @@
 # bg-zammad-mcp — BAUER GROUP Zammad MCP Server
 
 > **OAuth-gated remote MCP bridge** that exposes your self-hosted
-> [Zammad](https://zammad.org) helpdesk (v6.x / v7.x) to AI clients —
+> [Zammad](https://zammad.org) 7.x helpdesk to AI clients —
 > Claude Web Connectors, Claude Desktop, Microsoft 365 Copilot,
 > ChatGPT Connectors, Cursor, Continue.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Docker Image](https://img.shields.io/badge/ghcr.io-bg--zammad--mcp-blue?logo=docker)](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/pkgs/container/ip-zammad-mcpserver%2Fbg-zammad-mcp)
 [![FastMCP](https://img.shields.io/badge/built%20with-FastMCP-purple)](https://gofastmcp.com)
-[![Zammad v6/v7](https://img.shields.io/badge/Zammad-v6%20%2F%20v7-orange)](https://zammad.org)
+[![Zammad 7.x](https://img.shields.io/badge/Zammad-7.x-orange)](https://zammad.org)
 
 ---
 
@@ -17,10 +17,10 @@
 | Feature | What it means |
 | --- | --- |
 | **User-context** | The user's Zammad access token is forwarded end-to-end. Zammad sees every API call as coming from the actual person, not a shared service account — its own role and permission system enforces fine-grained access. |
-| **Zammad as OAuth IdP** | Primary auth mode uses Zammad's built-in **OAuth2 Applications** feature (Admin → Manage → OAuth2 Applications → Add). No external IdP required. |
+| **Zammad as OAuth IdP** | Primary auth mode uses Zammad's built-in OAuth2 application registry (Admin → System → API → Applications). No external IdP required. |
 | **External OIDC also supported** | Falls back to any standard OIDC provider — Entra ID, Keycloak, Authentik, Zitadel, Auth0, Okta — paired with a static Zammad API token. |
 | **Role-based MCP access** | `MCP_ALLOWED_ROLES=Admin,Agent` lets you say "this MCP is for staff only, never expose to Customers" as a coarse gate above Zammad's per-endpoint permissions. |
-| **v6 / v7 compatible** | The shared `/api/v1` surface is exercised against both majors. Runtime version probe surfaces the live release in the boot banner. |
+| **Zammad 7.x** | Targets the Zammad 7 `/api/v1` surface. `get_zammad_version` reports the live patch level on demand. |
 | **36 hand-curated tools** | Tickets, articles, users, organizations, groups, tags, reference data, notifications. Auto-run safety encoded as MCP tool annotations. |
 | **Multi-arch** | `linux/amd64` and `linux/arm64` images on GHCR. |
 | **Three deploy flavours** | Local development, self-hosted Traefik, Coolify-managed — same image, same source. |
@@ -70,7 +70,7 @@
                                      ▼
                         ┌────────────────────────┐
                         │  Zammad REST API       │
-                        │  /api/v1/* (v6 / v7)   │
+                        │  /api/v1/*  (Zammad 7) │
                         └────────────────────────┘
 ```
 
@@ -95,7 +95,7 @@ Then edit `.env` to fill:
 - `ZAMMAD_URL` (your Zammad base URL)
 - `AUTH_MODE=zammad` (the recommended default)
 - `ZAMMAD_OAUTH_CLIENT_ID` + `ZAMMAD_OAUTH_CLIENT_SECRET` — generated in
-  Zammad: **Admin → Manage → OAuth2 Applications → Add**.
+  Zammad: **Admin → System → API → Applications → New Application**.
 - `PUBLIC_BASE_URL` matching the hostname you'll expose.
 - `MCP_ALLOWED_ROLES=Admin,Agent` (or whatever role mix fits your case).
 
@@ -248,7 +248,7 @@ IP-ZAMMAD-MCPServer/
 
 | Component | Tested | Notes |
 | --- | --- | --- |
-| Python | 3.13 / 3.14 | Container ships 3.14 Alpine |
+| Python | 3.14 | Container ships 3.14 Alpine |
 | Zammad | **v6.0+** / **v7.x** | OAuth2 Applications feature requires v6.0; v5.x and earlier can use `AUTH_MODE=oidc` + `ZAMMAD_API_TOKEN` |
 | FastMCP | ≥ 3.0 | `OIDCProxy`, `OAuthProxy`, streamable-http transport |
 | Redis | 7.x / 8.x | OAuth client storage (recommended for production) |

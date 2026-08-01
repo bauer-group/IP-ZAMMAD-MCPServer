@@ -32,7 +32,7 @@ sees who the actual MCP user is.
 ## Mode 1 — Zammad as OAuth2 provider (recommended)
 
 This uses Zammad's built-in **OAuth2 Applications** feature, which ships in
-**Zammad v6.0 and later**. The Zammad install is the OAuth IdP; the MCP
+**Zammad 7.x**. The Zammad install is the OAuth IdP; the MCP
 server is the OAuth client; the human AI-tool user is the resource owner.
 
 ### Step 1: Register the application in Zammad
@@ -128,7 +128,7 @@ is forced to re-authenticate.
 
 Use this when you already have SSO via Entra ID, Keycloak, Authentik,
 Zitadel, Auth0, or Okta and want the same identity provider to gate the
-MCP. Or when your Zammad pre-dates v6 and lacks the OAuth2-Applications UI.
+MCP for every user, regardless of who they are in Zammad.
 
 **Trade-off:** Every MCP call from every user runs against Zammad as
 **one shared identity** (the owner of `ZAMMAD_API_TOKEN`). Zammad cannot

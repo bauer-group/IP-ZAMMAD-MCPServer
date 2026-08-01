@@ -3,7 +3,7 @@
 # =============================================================================
 # Remote MCP bridge for self-hosted Zammad. OAuth 2.1 inbound (Zammad as IdP
 # or external OIDC), Bearer/Token forwarding outbound, FastMCP + streamable-http
-# transport. Compatible with Zammad v6.x and v7.x.
+# transport. Targets Zammad 7.x.
 #
 # Multi-stage build with integrated testing.
 #
@@ -29,7 +29,9 @@ RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir --prefix=/install .
 
 
-# ── Stage 2: Test — run pytest; image build fails on any test failure ────────
+# ── Stage 2: Test — lint, type-check and test; the build fails on any of them ─
+# `pytest` alone used to run here WITHOUT --cov, so the fail_under threshold
+# declared in pyproject never fired and the stage exited 0 at 33% coverage.
 FROM python:3.14-alpine AS test
 
 RUN apk add --no-cache build-base libffi-dev git
@@ -41,7 +43,7 @@ COPY src/ ./src/
 COPY tests/ ./tests/
 
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir ".[test]"
+ && pip install --no-cache-dir ".[test,dev]"
 
 ENV PYTHONPATH=/app/src \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -69,7 +71,7 @@ LABEL org.opencontainers.image.authors="Karl Bauer <karl.bauer@bauer-group.com>"
 LABEL org.opencontainers.image.source="https://github.com/bauer-group/IP-ZAMMAD-MCPServer"
 LABEL org.opencontainers.image.url="https://github.com/bauer-group/IP-ZAMMAD-MCPServer"
 LABEL org.opencontainers.image.documentation="https://github.com/bauer-group/IP-ZAMMAD-MCPServer#readme"
-LABEL org.opencontainers.image.description="bg-zammad-mcp — OAuth-gated remote MCP for self-hosted Zammad v6/v7 (BAUER GROUP)"
+LABEL org.opencontainers.image.description="bg-zammad-mcp — OAuth-gated remote MCP for self-hosted Zammad 7.x (BAUER GROUP)"
 LABEL com.bauer-group.image.component="mcp-server"
 LABEL com.bauer-group.image.stack="zammad"
 LABEL org.opencontainers.image.version="0.1.10"

@@ -1,0 +1,93 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Tests — pull-request and pre-release quality gate
+# ─────────────────────────────────────────────────────────────────────────────
+#  WHAT
+#    Runs the same gate developers run locally: ruff, mypy --strict, and pytest
+#    with coverage enforced at the pyproject `fail_under` threshold.
+#
+#  WHY IT IS CALLED BY THE RELEASE PIPELINE
+#    The release job used to depend only on validate-compose and
+#    validate-shellscript — neither of which touches Python, and the repository
+#    contains no shell scripts at all. semantic-release therefore cut the tag,
+#    the GitHub Release and the CHANGELOG before a single test ran. The Docker
+#    test stage that did run invoked pytest without --cov, so the declared
+#    fail_under never fired either. docker-release.yml now calls this workflow
+#    and lists it in the release job's `needs`.
+#
+#  WHEN
+#    Every PR to main, direct pushes to main (docs-only excluded), manual
+#    dispatch, and workflow_call from the release pipeline.
+#
+#  REQUIREMENTS
+#    None beyond read access. bg-mcpcore installs from its public GitHub repo.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: 🧪 Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '*.MD'
+  workflow_dispatch:
+  workflow_call:
+
+# Least privilege: this workflow only reads the checked-out source.
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: 🔍 Lint, type-check, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app/bg-zammad-mcp
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v6
+
+      # Single version on purpose: pyproject declares requires-python >= 3.14
+      # and both ruff (target-version) and mypy (python_version) target 3.14.
+      # A matrix here would test a version the package does not claim to support.
+      - name: 🐍 Set up Python 3.14
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: 📦 Cache pip downloads
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-py314-pip-${{ hashFiles('app/bg-zammad-mcp/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-py314-pip-
+
+      - name: ⚙️ Install (test + dev)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test,dev]"
+
+      - name: 🎨 Lint (ruff)
+        run: ruff check src tests
+
+      - name: 🔍 Type-check (mypy --strict)
+        run: mypy src
+
+      # `env -i` wipes anything the runner exported that Pydantic Settings would
+      # otherwise pick up during test-time validation (a repository variable
+      # named ZAMMAD_URL, say), mirroring the Dockerfile test stage.
+      - name: 🧪 Unit tests + coverage
+        run: |
+          env -i HOME="$HOME" PATH="$PATH" \
+            PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
+            pytest -q --cov=src --cov-report=term-missing

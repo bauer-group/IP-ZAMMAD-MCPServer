@@ -5,7 +5,7 @@
 
 ## Goals
 
-1. Bridge a self-hosted [Zammad](https://zammad.org) (v6.x / v7.x) helpdesk
+1. Bridge a self-hosted [Zammad](https://zammad.org) 7.x helpdesk
    to MCP-aware AI clients (Claude Web, Claude Desktop, MS Copilot,
    ChatGPT, Cursor, Continue, Inspector).
 2. Preserve **user-context** end-to-end: when an agent triages a ticket
@@ -132,7 +132,7 @@ hand-written `python` source registered via the profile (`server:register`).
 | Component | Supported |
 | --- | --- |
 | Zammad | v6.0+, v7.x (tested) |
-| Python (runtime) | 3.13 / 3.14 |
+| Python (runtime) | 3.14 |
 | FastMCP | ≥ 3.0.0 |
 | Redis (OAuth state) | 7.x / 8.x |
 | Container base | `python:3.14-alpine` |
@@ -189,7 +189,7 @@ proxy we don't control and could be spoofed by the client.
 
 | Failure | Behaviour |
 | --- | --- |
-| Zammad unreachable at startup | Version probe fails, version logged as `unknown`, container still serves OAuth endpoints. Tool calls error out. |
+| Zammad unreachable at startup | The container starts regardless — nothing probes Zammad at boot. OAuth endpoints serve, but token verification (`/api/v1/users/me`) fails, so every request 401s until Zammad returns. |
 | Zammad unreachable mid-session | Tool call raises `ZammadTransportError` after 3 retries. AI client sees a JSON-RPC error. Session state is not invalidated. |
 | `/users/me` 401 | Token verification fails. MCP rejects the inbound request with 401. AI client retries the OAuth flow. |
 | Redis unreachable (Redis mode) | OAuth state lookups fail. New auth flows error out; existing sessions can continue until next refresh. Container logs `auth.storage_lookup_failed`. |

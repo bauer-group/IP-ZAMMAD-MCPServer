@@ -4,7 +4,7 @@ Reference-data tools - lookup tables that change rarely.
   GET /ticket_states      list all ticket states (open, closed, pending, ...)
   GET /ticket_priorities  list all priorities (1 low, 2 normal, 3 high)
   GET /roles              list all roles  (Admin / Agent / Customer / custom)
-  GET /version            Zammad version (also used by the v6/v7 probe)
+  GET /version            Zammad version string
 
 These are all read-only. Like every tool they pass through the MCP role
 allowlist (MCP_ALLOWED_ROLES) first; beyond that, Zammad hides custom
@@ -66,9 +66,9 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     @mcp.tool(
         name="get_zammad_version",
         description=(
-            "Return the live Zammad version string. Use to confirm whether "
-            "you're talking to v6.x or v7.x before invoking version-specific "
-            "behaviour."
+            "Return the live Zammad version string. This server targets "
+            "Zammad 7.x; use this to confirm the exact patch level when a "
+            "feature behaves unexpectedly."
         ),
         annotations=read_only,
     )

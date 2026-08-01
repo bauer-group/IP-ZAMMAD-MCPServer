@@ -1,7 +1,7 @@
 # Zammad MCP Server
 
 OAuth-gated remote MCP bridge for self-hosted [Zammad](https://zammad.org)
-(v6.x / v7.x). See the [repository README](../../README.md) and
+(7.x). See the [repository README](../../README.md) and
 [docs/](../../docs/) for installation, authentication setup, and
 client-connection instructions.
 
