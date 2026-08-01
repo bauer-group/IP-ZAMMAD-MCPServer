@@ -9,7 +9,6 @@ description = "BAUER GROUP Zammad MCP Server — OAuth2-gated remote MCP bridge 
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
-    { name = "BAUER GROUP", email = "info@bauer-group.com" },
     { name = "Karl Bauer", email = "karl.bauer@bauer-group.com" },
 ]
 requires-python = ">=3.13"
