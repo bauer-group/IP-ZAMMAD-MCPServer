@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from config import AuthMode, Settings
+from config import ZAMMAD_OAUTH_SCOPE, AuthMode, Settings
 
 # ── valid construction ───────────────────────────────────────────────────────
 
@@ -83,6 +83,61 @@ def test_oidc_without_api_token_rejected(clean_env) -> None:  # type: ignore[no-
     clean_env.setenv("OIDC_CLIENT_SECRET", "secret")
     with pytest.raises(ValueError, match="ZAMMAD_API_TOKEN is required"):
         Settings()
+
+
+# ── Zammad OAuth scope: Doorkeeper accepts `full` and nothing else ───────────
+
+
+def test_zammad_scope_defaults_to_full(base_zammad_env) -> None:  # type: ignore[no-untyped-def]
+    # Regression guard for the original "read write" default, which made every
+    # authorization attempt fail with invalid_scope *after* the user logged in.
+    assert Settings().zammad_oauth_scopes == ZAMMAD_OAUTH_SCOPE
+
+
+@pytest.mark.parametrize("scopes", ["read write", "read", "full write", ""])
+def test_zammad_rejects_non_full_scopes(base_zammad_env, scopes: str) -> None:  # type: ignore[no-untyped-def]
+    base_zammad_env.setenv("ZAMMAD_OAUTH_SCOPES", scopes)
+    with pytest.raises(ValueError, match="ZAMMAD_OAUTH_SCOPES must be exactly"):
+        Settings()
+
+
+def test_oidc_mode_leaves_zammad_scopes_alone(clean_env) -> None:  # type: ignore[no-untyped-def]
+    # The scope guard is Zammad-mode-only; oidc mode never touches /oauth/authorize.
+    clean_env.setenv("ENVIRONMENT", "development")
+    clean_env.setenv("PUBLIC_BASE_URL", "https://mcp.example.com")
+    clean_env.setenv("ZAMMAD_URL", "https://zammad.example.com")
+    clean_env.setenv("AUTH_MODE", "oidc")
+    clean_env.setenv("AUTH_JWT_SIGNING_KEY", "f" * 64)
+    clean_env.setenv("OIDC_DISCOVERY_URL", "https://idp.example.com/.well-known/openid-configuration")
+    clean_env.setenv("OIDC_CLIENT_ID", "cid")
+    clean_env.setenv("OIDC_CLIENT_SECRET", "secret")
+    clean_env.setenv("ZAMMAD_API_TOKEN", "pat")
+    clean_env.setenv("ZAMMAD_OAUTH_SCOPES", "read write")
+    assert Settings().auth_mode is AuthMode.OIDC
+
+
+# ── on-behalf-of guard: a static PAT must not shadow per-user tokens ─────────
+
+
+def test_zammad_mode_rejects_static_api_token(base_zammad_env) -> None:  # type: ignore[no-untyped-def]
+    # The profile's per_user_token resolver would fall back to this token and
+    # silently run tool calls as its owner instead of the calling user.
+    base_zammad_env.setenv("ZAMMAD_API_TOKEN", "pat-that-would-shadow-obo")
+    with pytest.raises(ValueError, match="ZAMMAD_API_TOKEN must be empty"):
+        Settings()
+
+
+def test_zammad_mode_static_token_allowed_with_explicit_opt_in(base_zammad_env) -> None:  # type: ignore[no-untyped-def]
+    base_zammad_env.setenv("ZAMMAD_API_TOKEN", "pat")
+    base_zammad_env.setenv("MCP_ALLOW_STATIC_FALLBACK", "true")
+    settings = Settings()
+    assert settings.mcp_allow_static_fallback is True
+
+
+def test_zammad_mode_blank_api_token_is_fine(base_zammad_env) -> None:  # type: ignore[no-untyped-def]
+    # Compose files pass ZAMMAD_API_TOKEN through unconditionally as "".
+    base_zammad_env.setenv("ZAMMAD_API_TOKEN", "   ")
+    assert Settings().auth_mode is AuthMode.ZAMMAD
 
 
 # ── role allowlist (now inherited from the bg-mcpcore base; enforced by the

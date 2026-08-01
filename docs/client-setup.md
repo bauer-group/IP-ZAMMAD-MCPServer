@@ -118,7 +118,7 @@ The OAuth consent screen rendered by FastMCP shows:
 | Server name | `MCP_DISPLAY_NAME` (default `BAUER GROUP Zammad`) |
 | Icon | `MCP_ICON_URL` if set, else `${PUBLIC_BASE_URL}/logo.svg` (bundled logo) |
 | Linked website | `MCP_WEBSITE_URL` |
-| Requested scopes | `read write` (Zammad mode) or your `OIDC_SCOPES` (OIDC mode) |
+| Requested scopes | `full` (Zammad mode — Doorkeeper's only scope) or your `OIDC_SCOPES` (OIDC mode) |
 
 To customise the look for a specific deployment, set those three env vars
 and redeploy — no code changes needed.

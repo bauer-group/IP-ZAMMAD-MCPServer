@@ -4,18 +4,24 @@ Zammad as OAuth2 provider via FastMCP's OAuthProxy.
 Operator setup (Zammad-side)
 ----------------------------
 1. Open Zammad as an administrator.
-2. Admin -> Manage -> OAuth2 Applications -> Add.
-3. Fill in:
-     * Name:            BAUER GROUP MCP (or your preferred display name)
-     * Redirect URI:    ${PUBLIC_BASE_URL}/auth/callback
-     * Scopes:          read write
-     * Confidential:    Yes
-4. Save and copy the generated client ID + client secret into
-   `ZAMMAD_OAUTH_CLIENT_ID` and `ZAMMAD_OAUTH_CLIENT_SECRET`.
+2. Admin -> System -> API  (the ``#system/api`` page, permission ``admin.api``).
+3. Under "Applications", click "New Application". The form has exactly two
+   fields - there is no scope and no "confidential" toggle:
+     * Name:          BAUER GROUP MCP (or your preferred display name)
+     * Callback URL:  ${PUBLIC_BASE_URL}/auth/callback
+4. Save, then use the row's "View" action to read the client ID and client
+   secret into `ZAMMAD_OAUTH_CLIENT_ID` / `ZAMMAD_OAUTH_CLIENT_SECRET`. Both
+   stay retrievable later - this is not a one-time reveal.
 
-The OAuth2-Applications feature ships with Zammad v6.0 and later. Earlier
-3.x / 4.x / 5.x releases predate it - they have no OAuth2 application
-config UI and must use AUTH_MODE=oidc + a Personal Access Token instead.
+Scopes
+------
+Zammad runs plain Doorkeeper with ``default_scopes :full`` and no optional
+scopes, and the form above never sets an application scope. Doorkeeper
+therefore validates every authorize request against ``server_scopes ==
+["full"]``: any other value (``read write``, say) is rejected with
+``invalid_scope`` after the user has already logged in. ``full`` is the only
+working value; Zammad's own per-request scope check is commented out, so
+nothing is lost. ``Settings.validate_provider_auth`` enforces this at boot.
 
 Inbound trust model
 -------------------

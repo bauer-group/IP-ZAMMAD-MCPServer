@@ -27,6 +27,10 @@ from bg_mcpcore.settings.enums import Environment as Environment  # re-exported 
 from pydantic import Field, HttpUrl, SecretStr
 from pydantic_settings import NoDecode
 
+# The only scope Zammad's Doorkeeper accepts (`default_scopes :full`, no
+# optional scopes, no scope field on the OAuth application form).
+ZAMMAD_OAUTH_SCOPE = "full"
+
 
 class AuthMode(StrEnum):
     # Primary mode: Zammad itself is the OAuth2 provider; the user's upstream
@@ -88,12 +92,34 @@ class Settings(BaseMcpSettings):
     # ── Zammad OAuth2 (AUTH_MODE=zammad) ──────────────────────────────────────
     zammad_oauth_client_id: str | None = None
     zammad_oauth_client_secret: SecretStr | None = None
-    zammad_oauth_scopes: str = "read write"
+    # Zammad's OAuth2 server is plain Doorkeeper configured with
+    # `default_scopes :full` and `optional_scopes` commented out, and its OAuth
+    # application form has no scope field at all — so `oauth_applications.scopes`
+    # stays empty and Doorkeeper's ScopeChecker validates against
+    # `server_scopes == ["full"]`. Requesting anything else (the intuitive
+    # "read write", for instance) fails pre-authorization with `invalid_scope`
+    # AFTER the user has already logged in. Zammad's own per-request scope check
+    # is commented out, so `full` gives up nothing. See validate_provider_auth.
+    zammad_oauth_scopes: str = "full"
     zammad_oauth_authorize_path: str = "/oauth/authorize"
     zammad_oauth_token_path: str = "/oauth/token"
     zammad_userinfo_path: str = Field(
         default="/api/v1/users/me",
         description="Endpoint used to validate the upstream token + read the role set.",
+    )
+
+    # ── On-behalf-of guard ────────────────────────────────────────────────────
+    # The profile's per_user_token resolver applies ZAMMAD_API_TOKEN whenever no
+    # per-user token can be resolved — a warning, not an error. In zammad mode
+    # that would silently downgrade "acts with the caller's rights" to
+    # "acts as whoever owns the PAT" (typically an admin). We therefore refuse
+    # the combination outright unless an operator opts in explicitly.
+    mcp_allow_static_fallback: bool = Field(
+        default=False,
+        description=(
+            "Permit ZAMMAD_API_TOKEN alongside AUTH_MODE=zammad. Off by default: "
+            "the fallback defeats per-user on-behalf-of access."
+        ),
     )
 
     # ── Validators ─────────────────────────────────────────────────────────────
@@ -116,7 +142,26 @@ class Settings(BaseMcpSettings):
                 raise ValueError(
                     f"{', '.join(n.upper() for n in missing)} required for AUTH_MODE=zammad. "
                     "Create an OAuth2 application in Zammad: "
-                    "Admin -> Manage -> OAuth2 Applications -> Add."
+                    "Admin -> System -> API -> Applications -> New Application."
+                )
+            # Doorkeeper only knows `full` (see the field comment above). Catching
+            # this at boot beats catching it as an `invalid_scope` redirect after
+            # the user has already typed their password.
+            requested = set(self.zammad_oauth_scopes.split())
+            if requested != {ZAMMAD_OAUTH_SCOPE}:
+                raise ValueError(
+                    f"ZAMMAD_OAUTH_SCOPES must be exactly '{ZAMMAD_OAUTH_SCOPE}' for "
+                    f"AUTH_MODE=zammad, got {sorted(requested) or ['(empty)']}. Zammad runs "
+                    "Doorkeeper with `default_scopes :full` and no optional scopes, so any "
+                    "other value is rejected with invalid_scope during authorization."
+                )
+            if _has_value(self.zammad_api_token) and not self.mcp_allow_static_fallback:
+                raise ValueError(
+                    "ZAMMAD_API_TOKEN must be empty when AUTH_MODE=zammad. The profile's "
+                    "per_user_token resolver falls back to it whenever a per-user token is "
+                    "missing, which would silently run tool calls as the token's owner "
+                    "(usually an admin) instead of the calling user. Set "
+                    "MCP_ALLOW_STATIC_FALLBACK=true only if you accept that."
                 )
         elif self.auth_mode is AuthMode.OIDC:
             has_discovery = bool(self.oidc_discovery_url)
@@ -166,4 +211,11 @@ def get_settings(force_reload: bool = False) -> Settings:
     return _core_get_settings(Settings, force_reload=force_reload)
 
 
-__all__ = ["AuthMode", "Environment", "Settings", "ZammadRole", "get_settings"]
+__all__ = [
+    "ZAMMAD_OAUTH_SCOPE",
+    "AuthMode",
+    "Environment",
+    "Settings",
+    "ZammadRole",
+    "get_settings",
+]

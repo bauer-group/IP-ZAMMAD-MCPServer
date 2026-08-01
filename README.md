@@ -128,22 +128,27 @@ See [docs/client-setup.md](docs/client-setup.md). Short version:
 ## Configuring Zammad as the OAuth2 provider
 
 This is the primary auth mode (`AUTH_MODE=zammad`) and uses Zammad's
-built-in OAuth2 Applications feature shipped in Zammad v6.0 and later.
+built-in OAuth2 application registry.
 
 1. Sign in to Zammad as an **administrator**.
-2. Open **Admin → Manage → OAuth2 Applications**.
-3. Click **+ Add** and fill in:
+2. Open **Admin → System → API** (page `#system/api`, permission `admin.api`).
+3. In the **Applications** section, click **New Application**. The form has
+   exactly two fields — there is no scope field and no confidential toggle:
 
    | Field | Value |
    | --- | --- |
    | **Name** | `BAUER GROUP MCP` (any human-friendly label) |
-   | **Redirect URI** | `${PUBLIC_BASE_URL}/auth/callback` (must match exactly) |
-   | **Scopes** | `read write` |
-   | **Confidential** | Yes |
+   | **Callback URL** | `${PUBLIC_BASE_URL}/auth/callback` (must match exactly) |
 
-4. Save and copy the generated **Client ID** + **Client Secret** into
-   `.env` (`ZAMMAD_OAUTH_CLIENT_ID` / `ZAMMAD_OAUTH_CLIENT_SECRET`).
-   The secret cannot be retrieved later — save it immediately.
+4. Save, then use the row's **View** action to copy the **Client ID** and
+   **Client Secret** into `.env` (`ZAMMAD_OAUTH_CLIENT_ID` /
+   `ZAMMAD_OAUTH_CLIENT_SECRET`). Both stay retrievable — this is not a
+   one-time reveal.
+
+> **Scopes:** leave `ZAMMAD_OAUTH_SCOPES=full`. Zammad runs Doorkeeper with
+> `default_scopes :full` and no optional scopes, so `full` is the only value
+> that authorizes; anything else fails with `invalid_scope` *after* the user
+> has logged in. The server rejects other values at boot.
 
 Full walkthrough with the user-context flow diagram: [docs/authentication.md](docs/authentication.md).
 

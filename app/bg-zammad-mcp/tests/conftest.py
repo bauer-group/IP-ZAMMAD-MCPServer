@@ -90,6 +90,8 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
         "MCP_ALLOWED_ROLES",
         "MCP_ROLE_CHECK_AUDIT_ONLY",
         "MCP_ROLE_CACHE_TTL_SECONDS",
+        # On-behalf-of guard
+        "MCP_ALLOW_STATIC_FALLBACK",
         # Rate limit
         "RATE_LIMITER_ENABLED",
         "RATE_LIMITER_MAX_REQUESTS_PER_SECOND",

@@ -90,7 +90,7 @@
 2. MCP -> AI client                                               (401 + WWW-Authenticate)
 3. AI client -> MCP /authorize                                    (PKCE challenge)
 4. MCP -> Zammad /oauth/authorize?...                             (redirect)
-5. User logs into Zammad, consents to read+write
+5. User logs into Zammad and consents (scope `full` — Doorkeeper's only scope)
 6. Zammad -> MCP /auth/callback?code=...                          (redirect)
 7. MCP -> Zammad /oauth/token                                     (POST code)
 8. Zammad -> MCP                                                  (access_token + refresh_token)
