@@ -1,3 +1,11 @@
+## [0.1.10](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.9...v0.1.10) (2026-07-31)
+
+## [0.1.9](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.8...v0.1.9) (2026-07-25)
+
+### 🐛 Bug Fixes
+
+* **ci:** added the missing permissions block ([cf2e8ac](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/cf2e8acb34a4798f91a26146a3e7f20d55ecbb57))
+
 ## [0.1.8](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.7...v0.1.8) (2026-06-23)
 
 ## [0.1.7](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.6...v0.1.7) (2026-06-16)
