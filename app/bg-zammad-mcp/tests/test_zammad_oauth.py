@@ -164,3 +164,137 @@ def test_required_scopes_property_returns_a_copy() -> None:
     assert scopes == [ZAMMAD_OAUTH_SCOPE]
     scopes.append("admin")  # mutating the returned list must not leak back
     assert verifier.required_scopes == [ZAMMAD_OAUTH_SCOPE]
+
+
+# ── verification caching, retry, and token metadata ──────────────────────────
+
+
+def _cached_verifier(ttl: int = 30) -> _ZammadUserInfoVerifier:
+    return _ZammadUserInfoVerifier(
+        userinfo_url=USERINFO_URL,
+        timeout=5.0,
+        verify_tls=True,
+        required_scopes=[ZAMMAD_OAUTH_SCOPE],
+        cache_ttl_seconds=ttl,
+    )
+
+
+@respx.mock
+async def test_successful_verification_is_cached() -> None:
+    """Zammad issues opaque tokens, so every MCP request costs a round trip.
+
+    A ten-tool turn should not be ten calls to /users/me.
+    """
+    route = respx.get(USERINFO_URL).mock(return_value=httpx.Response(200, json=_VALID_USER))
+    verifier = _cached_verifier()
+
+    for _ in range(5):
+        assert await verifier.verify_token("opaque-abc") is not None
+
+    assert route.call_count == 1
+
+
+@respx.mock
+async def test_cache_is_per_token() -> None:
+    respx.get(USERINFO_URL).mock(return_value=httpx.Response(200, json=_VALID_USER))
+    verifier = _cached_verifier()
+    await verifier.verify_token("token-a")
+    await verifier.verify_token("token-b")
+    assert respx.calls.call_count == 2
+
+
+@respx.mock
+async def test_rejections_are_never_cached() -> None:
+    """A revoked token must not stay rejected-then-accepted or vice versa.
+
+    Caching a failure would extend an outage; caching a 401 would keep a
+    re-authenticated user locked out. Only successes are cached.
+    """
+    route = respx.get(USERINFO_URL).mock(return_value=httpx.Response(401))
+    verifier = _cached_verifier()
+    assert await verifier.verify_token("bad") is None
+    assert await verifier.verify_token("bad") is None
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_cache_disabled_verifies_every_time() -> None:
+    route = respx.get(USERINFO_URL).mock(return_value=httpx.Response(200, json=_VALID_USER))
+    verifier = _cached_verifier(ttl=0)
+    await verifier.verify_token("t")
+    await verifier.verify_token("t")
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_expires_at_reflects_the_cache_ttl() -> None:
+    """expires_at states how long this assertion is good for.
+
+    It must stay None when caching is off — `now + 0` would read as already
+    expired to anything comparing it against the clock.
+    """
+    respx.get(USERINFO_URL).mock(return_value=httpx.Response(200, json=_VALID_USER))
+
+    cached = await _cached_verifier(ttl=30).verify_token("t")
+    assert cached is not None and cached.expires_at is not None
+
+    uncached = await _cached_verifier(ttl=0).verify_token("t")
+    assert uncached is not None and uncached.expires_at is None
+
+
+@respx.mock
+async def test_subject_is_populated() -> None:
+    respx.get(USERINFO_URL).mock(return_value=httpx.Response(200, json=_VALID_USER))
+    token = await _verifier().verify_token("t")
+    assert token is not None
+    assert token.subject == "42"
+
+
+@respx.mock
+async def test_transient_5xx_is_retried_then_succeeds() -> None:
+    """A few seconds of Zammad unavailability must not 401 every connected user."""
+    respx.get(USERINFO_URL).mock(
+        side_effect=[
+            httpx.Response(502),
+            httpx.Response(200, json=_VALID_USER),
+        ]
+    )
+    assert await _verifier().verify_token("t") is not None
+    assert respx.calls.call_count == 2
+
+
+@respx.mock
+async def test_transport_error_is_retried_then_succeeds() -> None:
+    respx.get(USERINFO_URL).mock(
+        side_effect=[
+            httpx.ConnectError("refused"),
+            httpx.Response(200, json=_VALID_USER),
+        ]
+    )
+    assert await _verifier().verify_token("t") is not None
+    assert respx.calls.call_count == 2
+
+
+@respx.mock
+async def test_persistent_5xx_gives_up_after_one_retry() -> None:
+    route = respx.get(USERINFO_URL).mock(return_value=httpx.Response(503))
+    assert await _verifier().verify_token("t") is None
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_401_is_not_retried() -> None:
+    """A 401 is a verdict, not a fault — retrying it just doubles the load."""
+    route = respx.get(USERINFO_URL).mock(return_value=httpx.Response(401))
+    assert await _verifier().verify_token("bad") is None
+    assert route.call_count == 1
+
+
+@respx.mock
+async def test_userinfo_request_asks_zammad_to_expand_roles() -> None:
+    """The access gate matches role NAMES; without expand=true Zammad returns
+    only numeric role_ids, the `roles` claim is empty, and the gate — which
+    passes when the claim is absent — silently stops enforcing."""
+    route = respx.get(USERINFO_URL).mock(return_value=httpx.Response(200, json=_VALID_USER))
+    await _verifier().verify_token("t")
+    assert route.calls[0].request.url.params["expand"] == "true"

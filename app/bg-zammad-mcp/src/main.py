@@ -25,6 +25,7 @@ if str(_SRC) not in sys.path:
 
 from bg_mcpcore import load_profile, make_cli  # noqa: E402
 
+from audit import WriteAuditMiddleware  # noqa: E402
 from config import Settings  # noqa: E402
 
 try:
@@ -37,6 +38,9 @@ app = make_cli(
     settings_cls=Settings,
     version=_VERSION,
     static_dir=str(_SRC / "static"),
+    # Zammad attributes every change to the acting user and cannot tell a human
+    # from an agent doing it on their behalf. This server can, so it records it.
+    extra_middleware=[WriteAuditMiddleware()],
 )
 
 if __name__ == "__main__":

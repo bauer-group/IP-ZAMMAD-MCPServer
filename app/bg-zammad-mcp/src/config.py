@@ -24,7 +24,8 @@ from typing import Annotated
 from bg_mcpcore import BaseMcpSettings
 from bg_mcpcore.settings import get_settings as _core_get_settings
 from bg_mcpcore.settings.enums import Environment as Environment  # re-exported for callers
-from pydantic import Field, HttpUrl, SecretStr
+from bg_mcpcore.settings.helpers import split_csv
+from pydantic import Field, HttpUrl, SecretStr, field_validator
 from pydantic_settings import NoDecode
 
 # The only scope Zammad's Doorkeeper accepts (`default_scopes :full`, no
@@ -107,6 +108,50 @@ class Settings(BaseMcpSettings):
         default="/api/v1/users/me",
         description="Endpoint used to validate the upstream token + read the role set.",
     )
+
+    # ── Inbound verification performance ──────────────────────────────────────
+    # Every MCP request (initialize, tools/list, every tools/call) re-validates
+    # the caller's opaque Zammad token against /api/v1/users/me, because Zammad
+    # issues no JWT that could be verified offline. A ten-tool Claude turn is
+    # ten Rails round-trips. This caches a SUCCESSFUL verification for a few
+    # seconds, keyed on a hash of the token.
+    #
+    # The trade-off is bounded staleness: a revoked token, a deactivated user or
+    # a role change takes up to this many seconds to take effect. Failures are
+    # never cached, so a rejection is always live. 0 disables caching entirely.
+    mcp_role_cache_ttl_seconds: int = Field(
+        default=30,
+        ge=0,
+        le=300,
+        description=(
+            "Seconds to cache a successful token verification (and with it the "
+            "caller's role set). 0 = verify against Zammad on every request."
+        ),
+    )
+
+    # ── Inbound DCR guard ─────────────────────────────────────────────────────
+    # MCP clients register dynamically (RFC 7591) and that endpoint is
+    # unauthenticated by design, so without an allowlist any party can register
+    # a client and have the authorization code delivered to a redirect URI they
+    # control. Empty = allow any (FastMCP's default), which is fine locally and
+    # a bad idea on a public deployment.
+    mcp_allowed_client_redirect_uris: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "https://claude.ai/api/mcp/auth_callback",
+            "https://claude.com/api/mcp/auth_callback",
+            "http://localhost:*",
+            "http://127.0.0.1:*",
+        ],
+        description=(
+            "CSV of redirect-URI patterns dynamically-registered clients may use "
+            "(a trailing * wildcard is honoured by FastMCP). Empty = allow any."
+        ),
+    )
+
+    @field_validator("mcp_allowed_client_redirect_uris", mode="before")
+    @classmethod
+    def _parse_redirect_uris_csv(cls, value: object) -> list[str]:
+        return split_csv(value)  # type: ignore[arg-type]
 
     # ── On-behalf-of guard ────────────────────────────────────────────────────
     # The profile's per_user_token resolver applies ZAMMAD_API_TOKEN whenever no
