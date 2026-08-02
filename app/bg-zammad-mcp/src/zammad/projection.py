@@ -130,53 +130,150 @@ def project(record: Any, keep: tuple[str, ...]) -> Any:
     return {key: record[key] for key in keep if key in record}
 
 
-def project_many(payload: Any, keep: tuple[str, ...], *, full: bool = False) -> Any:
-    """Project a Zammad list response, whatever shape it arrived in.
+def envelope(
+    items: list[Any],
+    *,
+    page: int | None = None,
+    per_page: int | None = None,
+    total_count: int | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
+    """Wrap a collection in the one shape every list-shaped tool returns.
 
-    Zammad returns a bare array normally, and ``{"records": [...],
-    "total_count": n}`` (or ``{"tickets": ...}``) once with_total_count is set,
-    so the wrapper has to be preserved rather than assumed away — the total
-    count is precisely the signal that tells a model its result was truncated.
+    Zammad speaks four different collection dialects and we used to publish all
+    of them: a bare array from index actions, ``{"records": …, "total_count": n}``
+    from search actions, ``{"assets": …, "index": …}`` from overviews, and
+    endpoints like ``/object_manager_attributes`` that ignore pagination and
+    return everything. A model that pattern-matches from the last tool it used
+    then reads ``result["records"]`` on a tool that returns a bare list.
+
+    Every key here is ALWAYS present, because a key that vanishes cannot be
+    discovered — a model that has only ever seen the paginated shape has no
+    reason to test for the other one. ``None`` means "not knowable here", which
+    is a different and much more useful statement than absence:
+
+    * ``total_count`` - total matching records. ``None`` for an index-backed
+      tool mid-listing: Zammad ignores ``with_total_count`` there and returns a
+      bare array, so the total cannot be had until the last page reveals it.
+    * ``page`` / ``per_page`` - ``None`` when the tool does not paginate at all
+      (``/tag_list`` and ``/object_manager_attributes`` ignore both and return
+      the full set; verified on 7.1.1).
+    * ``has_more`` - deliberately three-valued, and the reason this helper
+      exists. ``returned < per_page`` PROVES this is the last page;
+      ``page * per_page < total_count`` PROVES there is another. Only
+      ``returned == per_page`` with no total is actually unknown, and that is
+      reported as ``None`` rather than guessed. Guessing ``False`` is the
+      expensive direction: the model stops paging and reports a partial answer
+      as complete.
     """
-    if full:
-        return payload
+    returned = len(items)
+    has_more: bool | None
+    if per_page is None:
+        has_more = False  # the endpoint returned everything it has
+        # ...and if it returned everything, the total is not unknown — it is
+        # what we are holding. Reporting None would understate what we actually
+        # know and push the caller to look for a page that does not exist.
+        if total_count is None:
+            total_count = returned
+    elif returned < per_page:
+        has_more = False  # a short page is the last page
+        # Being on the last page makes the total arithmetic rather than
+        # unknown: every earlier page was full, and this one holds the
+        # remainder. It is the only way a caller of an index-backed list_*
+        # tool ever learns a total at all.
+        if total_count is None:
+            total_count = ((page or 1) - 1) * per_page + returned
+    elif total_count is not None:
+        has_more = (page or 1) * per_page < total_count
+    else:
+        has_more = None  # a full page with no total: genuinely unknown
+
+    return {
+        "items": items,
+        "returned": returned,
+        "total_count": total_count,
+        "page": page,
+        "per_page": per_page,
+        "has_more": has_more,
+        **extra,
+    }
+
+
+def unwrap(payload: Any) -> tuple[list[Any], int | None]:
+    """Pull the records and the total out of whatever Zammad sent back.
+
+    The five spellings are Zammad's, not ours: index actions send a bare array,
+    search actions send ``records``, and various endpoints use ``tickets``,
+    ``users``, ``organizations`` or ``assets``. Normalising here is what lets
+    `envelope` present one shape outward.
+    """
     if isinstance(payload, list):
-        return [project(item, keep) for item in payload]
+        return payload, None
     if isinstance(payload, dict):
-        out = dict(payload)
         for key in ("records", "tickets", "users", "organizations", "assets"):
-            value = out.get(key)
+            value = payload.get(key)
             if isinstance(value, list):
-                out[key] = [project(item, keep) for item in value]
-        return out
-    return payload
+                total = payload.get("total_count")
+                return value, total if isinstance(total, int) else None
+    return [], None
+
+
+def collection(
+    payload: Any,
+    keep: tuple[str, ...] | None = None,
+    *,
+    page: int | None = None,
+    per_page: int | None = None,
+    full: bool = False,
+    **extra: Any,
+) -> dict[str, Any]:
+    """Normalise a Zammad list response, project it, and wrap it — in one step.
+
+    This is what every list-shaped tool returns. Keeping it in one function is
+    the point: the code this replaced returned whatever wrapper Zammad happened
+    to send, so the response shape was decided by the upstream endpoint and by
+    whether ``with_total_count`` was passed, rather than by us.
+
+    ``full=True`` skips the projection but NOT the envelope — the escape hatch
+    is for missing fields, not for a second response shape. ``keep=None`` means
+    the same thing permanently, for the handful of collections (groups, macros,
+    notifications) whose records are already small enough to send whole.
+    """
+    items, total = unwrap(payload)
+    if keep is not None and not full:
+        items = [project(item, keep) for item in items]
+    return envelope(items, page=page, per_page=per_page, total_count=total, **extra)
 
 
 def trim_articles(
     payload: Any,
     *,
     max_body_chars: int,
-    limit: int | None = None,
+    page: int = 1,
+    per_page: int | None = None,
     newest_first: bool = False,
     full: bool = False,
 ) -> Any:
     """Bound an article list: fewest fields, shortest bodies, newest first.
 
-    Zammad's ``index_by_ticket`` has no pagination, so this is the only place a
-    ceiling can be applied at all. When articles are dropped the result says so
-    explicitly, and says which end was kept, because "the last 20 messages" and
-    "all 20 messages" lead to very different answers.
+    Zammad's ``index_by_ticket`` has no pagination at all — it returns the whole
+    thread, full HTML bodies included — so paging happens here or nowhere. It
+    used to happen as a bare ``limit``, which could only ever reach one end of
+    the thread: the middle of a long conversation was unreachable without
+    pulling all of it. Slicing by page instead costs nothing extra (the whole
+    thread is already in hand) and makes this behave like every other paginated
+    tool.
     """
-    if full or not isinstance(payload, list):
+    if not isinstance(payload, list):
         return payload
 
     articles = list(payload)
     total = len(articles)
     if newest_first:
         articles.reverse()
-    truncated_list = limit is not None and total > limit
-    if limit is not None:
-        articles = articles[:limit]
+    if per_page is not None:
+        start = (page - 1) * per_page
+        articles = articles[start : start + per_page]
 
     keep = (
         "id",
@@ -196,6 +293,9 @@ def trim_articles(
     for article in articles:
         if not isinstance(article, dict):
             continue
+        if full:
+            out.append(article)
+            continue
         trimmed = project(article, keep)
         body = article.get("body")
         if isinstance(body, str):
@@ -207,38 +307,31 @@ def trim_articles(
                 trimmed["body_truncated"] = True
         out.append(trimmed)
 
-    # The wrapper is UNCONDITIONAL. Two reasons, both learned the hard way:
-    #
-    # * `order` used to be emitted only when something was dropped, so the
-    #   recommended call — newest_first=True with a limit the thread does not
-    #   exceed — returned a reversed bare list with no ordering signal at all.
-    #   A model reads articles[0] as the opening message when it is the latest,
-    #   and reports that confidently. Silent, and wrong in the worst place.
-    # * Flipping between a bare array and an object based on how many articles
-    #   a ticket happens to have makes the response shape depend on data the
-    #   caller cannot see. Four extra keys are cheaper than a broken chain.
-    result: dict[str, Any] = {
-        "articles": out,
-        "total_count": total,
-        "returned": len(out),
-        "order": "newest first" if newest_first else "oldest first",
-    }
-    if truncated_list:
-        result["note"] = (
-            f"Only {len(out)} of {total} articles are included. Raise limit, "
-            "flip newest_first, or read specific articles with get_ticket_article."
-        )
-    return result
+    # `order` rides along in the shared envelope rather than replacing it. It
+    # is not decoration: it used to be emitted only when articles were dropped,
+    # so the recommended call — newest_first with a page the thread does not
+    # fill — came back reversed with no ordering signal at all. A model reads
+    # items[0] as the opening message when it is in fact the latest, and says
+    # so confidently.
+    return envelope(
+        out,
+        page=page,
+        per_page=per_page,
+        total_count=total,
+        order="newest first" if newest_first else "oldest first",
+    )
 
 
 __all__ = [
     "ORGANIZATION_FIELDS",
     "TICKET_FIELDS",
     "USER_FIELDS",
+    "collection",
+    "envelope",
     "parse_fields",
     "project",
-    "project_many",
     "strip_html",
     "trim_articles",
     "truncate",
+    "unwrap",
 ]

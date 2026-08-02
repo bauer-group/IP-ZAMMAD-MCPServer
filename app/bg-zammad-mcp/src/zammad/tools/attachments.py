@@ -61,6 +61,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from ..projection import envelope
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -175,13 +176,14 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     )
     async def list_ticket_attachments(
         ticket_id: Annotated[int, Field(ge=1)],
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         articles = await ctx.request("GET", f"/ticket_articles/by_ticket/{ticket_id}")
         rows: list[dict[str, Any]] = []
         for article in articles or []:
             for attachment in article.get("attachments") or []:
                 rows.append(_attachment_row(ticket_id, article, attachment))
-        return rows
+        # Synthesised from the whole thread, which Zammad never paginates.
+        return envelope(rows, ticket_id=ticket_id)
 
     @mcp.tool(
         name="download_ticket_attachment",

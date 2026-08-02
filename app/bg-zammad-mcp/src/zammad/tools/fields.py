@@ -66,6 +66,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from ..projection import envelope
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -105,7 +106,7 @@ def _trim_create_screen(payload: Any, *, include_hidden: bool) -> Any:
         if name in restrict:
             field["allowed_values"] = restrict[name]
         fields.append(field)
-    return {"count": len(fields), "fields": fields}
+    return envelope(fields)
 
 
 def register(mcp: FastMCP, ctx: ToolContext) -> int:
@@ -201,6 +202,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             rows = [row for row in rows if str(row.get("object", "")).casefold() == wanted]
         if not include_inactive:
             rows = [row for row in rows if row.get("active", True)]
-        return rows
+        # /object_manager_attributes ignores page and per_page entirely (59
+        # attributes still come back for per_page=1 on 7.1.1), so this is always
+        # the complete set — which the envelope states as page=None,
+        # has_more=False rather than leaving the caller to assume it.
+        return envelope(rows)
 
     return 2

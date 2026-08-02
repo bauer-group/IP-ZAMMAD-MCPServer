@@ -34,6 +34,7 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from ..errors import ZammadForbidden
+from ..projection import collection
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -71,11 +72,12 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             Field(ge=1, le=INDEX_MAX_PER_PAGE, description="Entries per page (max 1000)"),
         ] = 50,
     ) -> Any:
-        return await ctx.request(
+        payload = await ctx.request(
             "GET",
             f"/tickets/{ticket_id}/time_accountings",
             params={"page": page, "per_page": per_page},
         )
+        return collection(payload, page=page, per_page=per_page, ticket_id=ticket_id)
 
     @mcp.tool(
         name="add_ticket_time_entry",

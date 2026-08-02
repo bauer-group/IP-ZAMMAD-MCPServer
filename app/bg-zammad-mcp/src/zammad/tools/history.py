@@ -51,6 +51,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from ..projection import envelope
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -168,11 +169,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         people = _people(body.get("assets")) if isinstance(body, dict) else {}
         entries = raw if isinstance(raw, list) else []
         history = [_trim_history_entry(entry, people) for entry in entries]
-        return {
-            "ticket_id": ticket_id,
-            "entry_count": len(history),
-            "history": history,
-        }
+        # /ticket_history has no pagination: this is always the whole trail.
+        return envelope(history, ticket_id=ticket_id)
 
     @mcp.tool(
         name="set_article_visibility",

@@ -55,6 +55,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from ..projection import envelope
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -146,13 +147,16 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             )
         tickets = _join_tickets(payload)
         start = (page - 1) * per_page
-        return {
-            "overview": index.get("overview"),
-            "total_count": index.get("count"),
-            "fetched_count": len(tickets),
-            "page": page,
-            "per_page": per_page,
-            "tickets": tickets[start : start + per_page],
-        }
+        # `fetched_count` used to report len(tickets) — the whole joined queue,
+        # not the slice actually returned — so a 5-ticket page out of a
+        # 200-ticket queue claimed to have fetched 200. `returned` in the
+        # envelope is computed from what actually ships.
+        return envelope(
+            tickets[start : start + per_page],
+            page=page,
+            per_page=per_page,
+            total_count=index.get("count"),
+            overview=index.get("overview"),
+        )
 
     return 2

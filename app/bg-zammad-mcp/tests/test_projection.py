@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from zammad.projection import (
     TICKET_FIELDS,
+    collection,
     parse_fields,
     project,
-    project_many,
     strip_html,
     trim_articles,
     truncate,
@@ -57,25 +57,10 @@ def test_non_dict_records_pass_through_untouched() -> None:
     assert project("not a record", TICKET_FIELDS) == "not a record"
 
 
-def test_project_many_handles_a_bare_array() -> None:
-    out = project_many([_FAT_TICKET, _FAT_TICKET], TICKET_FIELDS)
-    assert isinstance(out, list)
-    assert all("preferences" not in item for item in out)
-
-
-def test_project_many_preserves_the_total_count_wrapper() -> None:
-    """with_total_count changes the response from an array to an object, and the
-    count is exactly the signal that tells a model its result was truncated -
-    projecting it away would defeat the pagination fix."""
-    payload = {"records": [_FAT_TICKET], "total_count": 4000}
-    out = project_many(payload, TICKET_FIELDS)
-    assert out["total_count"] == 4000
-    assert "preferences" not in out["records"][0]
-
-
 def test_full_returns_the_raw_payload() -> None:
-    payload = [_FAT_TICKET]
-    assert project_many(payload, TICKET_FIELDS, full=True) is payload
+    """The escape hatch skips the projection, not the envelope."""
+    out = collection([_FAT_TICKET], TICKET_FIELDS, full=True)
+    assert out["items"] == [_FAT_TICKET]
 
 
 def test_explicit_field_whitelist_wins() -> None:
@@ -144,13 +129,13 @@ def _articles(count: int, body: str = "hello") -> list[dict[str, object]]:
 
 
 def test_article_bodies_are_capped_and_flagged() -> None:
-    out = trim_articles(_articles(1, body="y" * 500), max_body_chars=100)["articles"]
+    out = trim_articles(_articles(1, body="y" * 500), max_body_chars=100)["items"]
     assert out[0]["body_truncated"] is True
     assert len(str(out[0]["body"])) < 200
 
 
 def test_short_bodies_are_not_flagged() -> None:
-    out = trim_articles(_articles(1, body="short"), max_body_chars=100)["articles"]
+    out = trim_articles(_articles(1, body="short"), max_body_chars=100)["items"]
     assert "body_truncated" not in out[0]
     assert out[0]["body"] == "short"
 
@@ -158,7 +143,7 @@ def test_short_bodies_are_not_flagged() -> None:
 def test_html_bodies_are_flattened() -> None:
     articles = _articles(1, body="<p>Hi <b>there</b></p>")
     articles[0]["content_type"] = "text/html"
-    out = trim_articles(articles, max_body_chars=1000)["articles"]
+    out = trim_articles(articles, max_body_chars=1000)["items"]
     assert "<" not in str(out[0]["body"])
 
 
@@ -166,42 +151,45 @@ def test_dropping_articles_is_never_silent() -> None:
     """Zammad does not paginate this endpoint, so this cap is the only one there
     is. A model told "here are the articles" when it got 5 of 40 would
     summarise a fifth of a conversation as the whole of it."""
-    out = trim_articles(_articles(40), max_body_chars=500, limit=5)
+    out = trim_articles(_articles(40), max_body_chars=500, per_page=5)
     assert isinstance(out, dict)
     assert out["total_count"] == 40
     assert out["returned"] == 5
-    assert len(out["articles"]) == 5
-    assert "40" in out["note"]
+    assert len(out["items"]) == 5
+    # The signal that something is missing. `note` used to carry it as prose;
+    # has_more carries it as a value a caller can branch on.
+    assert out["has_more"] is True
 
 
 def test_the_shape_never_depends_on_how_many_articles_there_are() -> None:
     """A bare array for short threads and an object for long ones would make the
     response type depend on data the caller cannot see."""
-    short = trim_articles(_articles(3), max_body_chars=500, limit=10)
-    long = trim_articles(_articles(40), max_body_chars=500, limit=5)
-    assert set(short) >= {"articles", "total_count", "returned", "order"}
-    assert set(long) >= {"articles", "total_count", "returned", "order"}
-    assert "note" not in short, "nothing was dropped, so there is nothing to note"
-    assert "note" in long
+    short = trim_articles(_articles(3), max_body_chars=500, per_page=10)
+    long = trim_articles(_articles(40), max_body_chars=500, per_page=5)
+    assert set(short) == set(long), "the keys must not depend on the thread length"
+    assert set(short) >= {"items", "total_count", "returned", "order", "has_more"}
+    # Same keys either way; only the VALUES differ, which is the whole point.
+    assert short["has_more"] is False, "the thread fit, so there is nothing more"
+    assert long["has_more"] is True
 
 
 def test_ordering_is_always_stated_even_when_nothing_was_dropped() -> None:
     """The regression this file exists for: newest_first reversed the list but
     only said so when it ALSO truncated, so the recommended call on a short
     thread returned a reversed list with no signal at all."""
-    out = trim_articles(_articles(3), max_body_chars=500, limit=10, newest_first=True)
+    out = trim_articles(_articles(3), max_body_chars=500, per_page=10, newest_first=True)
     assert out["order"] == "newest first"
-    assert [a["id"] for a in out["articles"]] == [2, 1, 0]
+    assert [a["id"] for a in out["items"]] == [2, 1, 0]
 
 
 def test_newest_first_reverses_and_says_so() -> None:
-    out = trim_articles(_articles(10), max_body_chars=500, limit=3, newest_first=True)
+    out = trim_articles(_articles(10), max_body_chars=500, per_page=3, newest_first=True)
     assert out["order"] == "newest first"
-    assert [a["id"] for a in out["articles"]] == [9, 8, 7]
+    assert [a["id"] for a in out["items"]] == [9, 8, 7]
 
 
 def test_article_noise_is_dropped(  ) -> None:
-    out = trim_articles(_articles(1), max_body_chars=500)["articles"]
+    out = trim_articles(_articles(1), max_body_chars=500)["items"]
     assert "preferences" not in out[0]
     assert "origin_by_id" not in out[0]
     # ...but everything needed to judge who said what to whom survives.
@@ -210,5 +198,9 @@ def test_article_noise_is_dropped(  ) -> None:
 
 
 def test_full_skips_article_trimming_entirely() -> None:
+    """`full` is an escape hatch for missing fields, not for a second response
+    shape — the records come back untouched, still inside the one envelope."""
     raw = _articles(3)
-    assert trim_articles(raw, max_body_chars=1, full=True) is raw
+    out = trim_articles(raw, max_body_chars=1, full=True)
+    assert out["items"] == raw
+    assert out["returned"] == 3

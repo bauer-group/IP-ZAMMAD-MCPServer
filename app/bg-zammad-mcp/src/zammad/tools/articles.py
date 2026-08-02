@@ -56,8 +56,9 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             "from the customer). Bodies are converted from HTML to plain text "
             "and shortened to `max_body_chars`; raise it when you need a verbatim "
             "quote. Zammad does not paginate this endpoint, so a long e-mail "
-            "thread arrives in one response - use `limit` with "
-            "`newest_first=True` to read just the recent end of a conversation. "
+            "thread arrives in one response - use `per_page` with "
+            "`newest_first=True` with `per_page` to read just the recent end of a "
+            "conversation. "
             "Set `full=True` for Zammad's untouched payload."
         ),
         annotations=ToolAnnotations(
@@ -66,9 +67,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     )
     async def list_ticket_articles(
         ticket_id: Annotated[int, Field(ge=1)],
-        limit: Annotated[
+        page: Annotated[int, Field(ge=1, description="1-indexed page number")] = 1,
+        per_page: Annotated[
             int | None,
-            Field(ge=1, description="Return at most this many articles (default: all)"),
+            Field(ge=1, description="Articles per page (default: the whole thread)"),
         ] = None,
         newest_first: Annotated[
             bool,
@@ -91,7 +93,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         return trim_articles(
             payload,
             max_body_chars=max_body_chars,
-            limit=limit,
+            page=page,
+            per_page=per_page,
             newest_first=newest_first,
             full=full,
         )

@@ -37,6 +37,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from ..projection import envelope
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -197,9 +198,14 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             payload["knowledge_base_id"] = knowledge_base_id
         if locale is not None:
             payload["locale"] = locale
-        return _annotate_answer_ids(
+        body = _annotate_answer_ids(
             await ctx.request("POST", "/knowledge_bases/search", json=payload)
         )
+        # Zammad puts KB hits under `details` (not `records`) and ignores
+        # with_total_count here, so the total is genuinely unavailable — which
+        # the envelope reports as None rather than implying completeness.
+        hits = body.get("details") if isinstance(body, dict) else None
+        return envelope(hits if isinstance(hits, list) else [], page=page, per_page=per_page)
 
     @mcp.tool(
         name="get_kb_answer",

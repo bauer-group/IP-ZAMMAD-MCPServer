@@ -162,11 +162,8 @@ async def test_get_me_expands_roles(user_tools) -> None:  # type: ignore[no-unty
 async def test_search_users_honours_an_explicit_field_whitelist(user_tools) -> None:  # type: ignore[no-untyped-def]
     """End-to-end through the tool, not just the projection helper: this is the
     only place that proves `fields` is actually wired into the return path."""
-    import json
-
     mcp, ctx = user_tools
     ctx._response = [{"id": 1, "login": "a", "note": "drop me"}]
     result = await _call(mcp, "search_users", query="a", fields="id,login")
 
-    # A list return has no structuredContent — FastMCP puts the JSON in content.
-    assert json.loads(result.content[0].text) == [{"id": 1, "login": "a"}]
+    assert result.structured_content["items"] == [{"id": 1, "login": "a"}]

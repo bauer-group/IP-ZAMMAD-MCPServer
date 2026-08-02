@@ -219,8 +219,8 @@ async def test_history_keeps_every_entry_in_order() -> None:
     result = _structured(await _call(mcp, "get_ticket_history", ticket_id=7))
 
     assert result["ticket_id"] == 7
-    assert result["entry_count"] == 3
-    assert [entry["at"] for entry in result["history"]] == [
+    assert result["total_count"] == 3
+    assert [entry["at"] for entry in result["items"]] == [
         "2026-07-01T08:00:00.000Z",
         "2026-07-01T08:05:00.000Z",
         "2026-07-02T09:30:00.000Z",
@@ -231,7 +231,7 @@ async def test_history_resolves_the_actor_and_the_change() -> None:
     ctx = RecordingCtx(HISTORY_PAYLOAD)
     mcp = _register(ctx)
     result = _structured(await _call(mcp, "get_ticket_history", ticket_id=7))
-    close = result["history"][2]
+    close = result["items"][2]
 
     assert close["by_id"] == 1
     assert close["action"] == "updated"
@@ -252,14 +252,14 @@ async def test_history_names_the_user_from_the_assets_blob() -> None:
     ctx = RecordingCtx(HISTORY_PAYLOAD)
     mcp = _register(ctx)
     result = _structured(await _call(mcp, "get_ticket_history", ticket_id=7))
-    assert result["history"][0]["by"] == "Aya Nguyen"
+    assert result["items"][0]["by"] == "Aya Nguyen"
 
 
 async def test_history_points_at_the_related_article() -> None:
     ctx = RecordingCtx(HISTORY_PAYLOAD)
     mcp = _register(ctx)
     result = _structured(await _call(mcp, "get_ticket_history", ticket_id=7))
-    article_row = result["history"][1]
+    article_row = result["items"][1]
     assert article_row["object"] == "Ticket::Article"
     assert article_row["object_id"] == 42
     assert article_row["related_object"] == "Ticket"
@@ -271,7 +271,7 @@ async def test_history_drops_the_assets_blob() -> None:
     mcp = _register(ctx)
     result = _structured(await _call(mcp, "get_ticket_history", ticket_id=7))
     assert "assets" not in result
-    assert all("id" not in entry for entry in result["history"]), (
+    assert all("id" not in entry for entry in result["items"]), (
         "the history row's own id is not addressable by any endpoint"
     )
 
@@ -280,7 +280,9 @@ async def test_history_survives_an_empty_log() -> None:
     ctx = RecordingCtx({"history": [], "assets": {}})
     mcp = _register(ctx)
     result = _structured(await _call(mcp, "get_ticket_history", ticket_id=7))
-    assert result == {"ticket_id": 7, "entry_count": 0, "history": []}
+    assert result["items"] == []
+    assert result["ticket_id"] == 7
+    assert result["total_count"] == 0
 
 
 # ── set_article_visibility ───────────────────────────────────────────────────

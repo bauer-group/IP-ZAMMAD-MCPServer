@@ -23,7 +23,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from ..projection import USER_FIELDS, parse_fields, project_many
+from ..projection import USER_FIELDS, collection, parse_fields
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -91,14 +91,20 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 "expand": str(expand).lower(),
             },
         )
-        return project_many(payload, parse_fields(fields) or USER_FIELDS, full=full)
+        return collection(
+            payload,
+            parse_fields(fields) or USER_FIELDS,
+            page=page,
+            per_page=per_page,
+            full=full,
+        )
 
     @mcp.tool(
         name="search_users",
         description=(
             "Search Zammad users by name, e-mail, login, or other indexed "
             "fields, using the same Elasticsearch-backed query syntax as "
-            "`search_tickets`. Pass `page` to go beyond the first `limit` "
+            "`search_tickets`. Pass `page` to go beyond the first `per_page` "
             "results."
         ),
         annotations=ToolAnnotations(
@@ -108,13 +114,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     async def search_users(
         query: Annotated[str, Field(min_length=1)],
         page: Annotated[int, Field(ge=1, description="1-indexed page number")] = 1,
-        limit: Annotated[
+        per_page: Annotated[
             int, Field(ge=1, le=SEARCH_MAX_LIMIT, description="Results per page (max 200)")
         ] = 25,
         expand: Annotated[bool, Field(description="Inline role names")] = True,
-        with_total_count: Annotated[
-            bool, Field(description="Include the total match count alongside the page")
-        ] = True,
         fields: Annotated[
             str | None,
             Field(
@@ -132,13 +135,18 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         params: dict[str, Any] = {
             "query": query,
             "page": page,
-            "limit": limit,
+            "per_page": per_page,
             "expand": str(expand).lower(),
+            "with_total_count": "true",
         }
-        if with_total_count:
-            params["with_total_count"] = "true"
         payload = await ctx.request("GET", "/users/search", params=params)
-        return project_many(payload, parse_fields(fields) or USER_FIELDS, full=full)
+        return collection(
+            payload,
+            parse_fields(fields) or USER_FIELDS,
+            page=page,
+            per_page=per_page,
+            full=full,
+        )
 
     @mcp.tool(
         name="get_user",

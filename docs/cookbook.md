@@ -10,6 +10,39 @@ The full tool list is generated at [tools.md](tools.md).
 
 ---
 
+## 0. One shape for every collection
+
+Read this once and the other ten recipes need no shape explanations. Every tool
+that returns more than one record answers with the same object:
+
+```json
+{
+  "items":       [ ... ],
+  "returned":    25,
+  "total_count": 412,
+  "page":        1,
+  "per_page":    25,
+  "has_more":    true
+}
+```
+
+No key ever vanishes. `total_count` and `has_more` are `null` when the backing
+endpoint genuinely cannot tell: Zammad's index actions ignore
+`with_total_count` and answer with a bare array, so `list_tickets` does not know
+the total until you reach the last page, while `search_tickets` knows it from
+the first. `page` and `per_page` are `null` for the endpoints that ignore
+pagination entirely and always return everything (`list_all_tags`,
+`list_object_attributes`).
+
+**`has_more` is three-valued on purpose.** `false` is a proof, not a guess —
+the page came back short, or a known total is exhausted. `null` means a full
+page with no total, which is genuinely unknown, so ask for the next one. It is
+never `false` while records remain, and that is the property that lets you stop
+paging without wondering whether you missed something.
+
+Tools with something of their own add it alongside: `order` on articles,
+`ticket_id` on a history, `open_items` on a checklist.
+
 ## 1. "What's on my plate?"
 
 **Do not start with a search.** Start with the agent's own overviews:
@@ -43,12 +76,13 @@ plus `list_ticket_articles` — that is two round trips for the same thing.
 For a long e-mail thread, read the recent end on its own:
 
 ```text
-list_ticket_articles(ticket_id=4711, newest_first=true, limit=10, max_body_chars=2000)
+list_ticket_articles(ticket_id=4711, newest_first=true, per_page=10, max_body_chars=2000)
 ```
 
-Bodies come back as plain text (HTML is flattened) and capped. If anything was
-dropped you get `{articles, total_count, returned, order, note}` rather than a
-bare list, so you can tell "the last 10 of 96" from "all 10".
+Bodies come back as plain text (HTML is flattened) and capped. Like every
+collection here the answer is the shared envelope, so "the last 10 of 96" and
+"all 10" are told apart by reading `has_more` rather than guessing from the
+length. `order` rides along to say which end you are looking at.
 
 **The thing to actually check while reading:** which articles are `internal`.
 Those are invisible to the customer. Answering as though they have seen an
@@ -211,8 +245,11 @@ Work through it in this order — the first two account for most cases:
 2. **Is the search index healthy?** Field-scoped queries need Elasticsearch. If
    it is rebuilding, they return an empty list rather than an error — retry with
    `search_tickets_by_condition`, which never touches the index.
-3. **Did you page?** Search results are pages. `with_total_count` is on by
-   default, so compare `total_count` against what you got.
+3. **Did you page?** Every collection is a page. Read `has_more`: `true` means
+   fetch `page + 1`, `false` means you have everything, and `null` means the
+   endpoint cannot tell — ask for the next page to find out. `list_*` tools
+   only learn `total_count` on the last page; `search_*` tools report it from
+   the first.
 4. **Is an AI provider configured?** The AI tools need an OpenAI or Anthropic
    key set up in Zammad. Without one they say so plainly rather than returning
    a generic error.

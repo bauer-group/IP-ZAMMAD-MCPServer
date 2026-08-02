@@ -50,6 +50,7 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from ..errors import ZammadValidationError
+from ..projection import collection
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -123,11 +124,12 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             Field(description="Inline group/role names instead of IDs"),
         ] = True,
     ) -> Any:
-        return await ctx.request(
+        payload = await ctx.request(
             "GET",
             "/macros",
             params={"page": page, "per_page": per_page, "expand": str(expand).lower()},
         )
+        return collection(payload, page=page, per_page=per_page)
 
     @mcp.tool(
         name="apply_macro_to_tickets",

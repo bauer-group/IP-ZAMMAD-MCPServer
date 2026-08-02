@@ -42,6 +42,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from ..projection import envelope
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -94,14 +95,13 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 }
             )
 
-        return {
-            "ticket_id": ticket_id,
-            "checklist_id": checklist_id,
-            "name": checklist.get("name"),
-            "items": items,
-            "total": len(items),
-            "open": sum(1 for item in items if not item["checked"]),
-        }
+        return envelope(
+            items,
+            ticket_id=ticket_id,
+            checklist_id=checklist_id,
+            name=checklist.get("name"),
+            open_items=sum(1 for item in items if not item["checked"]),
+        )
 
     @mcp.tool(
         name="get_ticket_checklist",
@@ -130,14 +130,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ticket = await ctx.request("GET", f"/tickets/{ticket_id}")
         checklist_id = ticket.get("checklist_id") if isinstance(ticket, dict) else None
         if not checklist_id:
-            return {
-                "ticket_id": ticket_id,
-                "checklist_id": None,
-                "name": None,
-                "items": [],
-                "total": 0,
-                "open": 0,
-            }
+            # Same envelope as the populated case. A tool that answers "no
+            # checklist" with a differently-shaped object makes the caller
+            # branch on a condition it cannot see before calling.
+            return envelope([], ticket_id=ticket_id, checklist_id=None, name=None, open_items=0)
         body = await ctx.request(
             "GET",
             f"/checklists/{checklist_id}",

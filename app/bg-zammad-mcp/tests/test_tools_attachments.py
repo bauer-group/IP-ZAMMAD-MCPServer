@@ -145,7 +145,7 @@ async def test_list_reads_the_ticket_articles_and_flattens_them() -> None:
     assert ctx.last["method"] == "GET"
     assert ctx.last["path"] == "/ticket_articles/by_ticket/5"
 
-    rows = result.structured_content["result"]
+    rows = result.structured_content["items"]
     assert [row["attachment_id"] for row in rows] == [7, 8, 9]
     assert rows[0] == {
         "ticket_id": 5,
@@ -171,7 +171,7 @@ async def test_list_reads_the_ticket_articles_and_flattens_them() -> None:
 async def test_list_returns_empty_for_articles_without_files() -> None:
     mcp, _ = _build([[{"id": 1, "attachments": []}, {"id": 2}]])
     result = await _call(mcp, "list_ticket_attachments", ticket_id=5)
-    assert result.structured_content["result"] == []
+    assert result.structured_content["items"] == []
 
 
 @pytest.mark.parametrize(
@@ -190,7 +190,7 @@ async def test_mime_type_is_read_from_any_of_the_four_preference_keys(
         [[_article(attachments=[{"id": 1, "filename": "f", "preferences": {key: value}}])]]
     )
     result = await _call(mcp, "list_ticket_attachments", ticket_id=5)
-    assert result.structured_content["result"][0]["mime_type"] == expected
+    assert result.structured_content["items"][0]["mime_type"] == expected
 
 
 # ── download_ticket_attachment ───────────────────────────────────────────────

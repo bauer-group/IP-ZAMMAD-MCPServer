@@ -244,6 +244,11 @@ async def test_declared_counts_match_registrations() -> None:
 
 # Words that look like parameters in prose but are values, JSON keys or
 # Zammad-side field names rather than tool parameters.
+# Keys of the shared response envelope. A description SHOULD be able to point
+# the model at `has_more` or `total_count` — they are what it must read to know
+# whether to keep paging — but they are response fields, not parameters.
+_ENVELOPE_KEYS = {"items", "returned", "total_count", "page", "has_more", "order"}
+
 _PROSE_ALLOWLIST = {
     "note",
     "email",
@@ -273,7 +278,7 @@ async def test_descriptions_only_name_real_parameters(mcp_and_ctx) -> None:  # t
         params = set(schema.get("properties", {}))
         # `backticked` identifiers in the description that look like parameters
         for token in re.findall(r"`([a-z][a-z0-9_]{2,})`", tool.description or ""):
-            if token in params or token in _PROSE_ALLOWLIST:
+            if token in params or token in _PROSE_ALLOWLIST or token in _ENVELOPE_KEYS:
                 continue
             # A reference to another tool is fine.
             if token in EXPECTED_TOOLS:

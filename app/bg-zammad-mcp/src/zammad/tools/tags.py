@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from ..projection import collection
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -62,7 +63,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ),
     )
     async def list_all_tags() -> Any:
-        return await ctx.request("GET", "/tag_list")
+        # /tag_list ignores pagination (3 tags for per_page=1 on 7.1.1).
+        return collection(await ctx.request("GET", "/tag_list"))
 
     @mcp.tool(
         name="search_tags",
@@ -74,7 +76,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     async def search_tags(
         term: Annotated[str, Field(min_length=1)],
     ) -> Any:
-        return await ctx.request("GET", "/tag_search", params={"term": term})
+        return collection(await ctx.request("GET", "/tag_search", params={"term": term}))
 
     @mcp.tool(
         name="add_tag",

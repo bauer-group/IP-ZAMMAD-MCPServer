@@ -156,8 +156,8 @@ async def test_get_ticket_checklist_walks_ticket_then_checklist() -> None:
     payload = result.structured_content
     assert payload["checklist_id"] == 6
     assert payload["name"] == "Return order"
-    assert payload["total"] == 3
-    assert payload["open"] == 2
+    assert payload["total_count"] == 3
+    assert payload["open_items"] == 2
     # sorted_item_ids wins over item_ids, and the noise assets are gone.
     assert [item["item_id"] for item in payload["items"]] == [20, 18, 19]
     assert payload["items"][0]["text"] == "See #16007"
@@ -176,7 +176,7 @@ async def test_get_ticket_checklist_without_a_checklist_makes_one_call() -> None
     payload = result.structured_content
     assert payload["checklist_id"] is None
     assert payload["items"] == []
-    assert payload["total"] == 0
+    assert payload["total_count"] == 0
 
 
 async def test_get_ticket_checklist_falls_back_to_the_raw_body() -> None:

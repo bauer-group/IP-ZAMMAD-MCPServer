@@ -18,11 +18,20 @@ permission system gates which tickets the caller can see / edit / delete.
 
 Pagination
 ----------
-Zammad computes ``offset = (page - 1) * limit`` and defaults ``page`` to 1
-(``CanPaginate::Pagination``). A tool that sends only ``limit`` is therefore
+Zammad computes ``offset = (page - 1) * per_page`` and defaults ``page`` to 1
+(``CanPaginate::Pagination``). A tool that sends only a page size is therefore
 structurally pinned to the first page - it can never reach result 26. Every
-list/search tool here sends ``page`` explicitly, and requests
-``with_total_count`` so the caller can tell "25 matches" from "25 of 4000".
+tool here sends ``page`` explicitly.
+
+Zammad accepts ``per_page`` and ``limit`` interchangeably on both index and
+search actions (measured on 7.1.1: ``/tickets?limit=3&page=2`` and
+``?per_page=3&page=2`` return the same window), so the two spellings its own
+docs use are not published here - every tool takes ``page`` + ``per_page``.
+
+What differs, and cannot be papered over: search actions honour
+``with_total_count`` and report the real total, while index actions ignore it
+and return a bare array. So ``total_count`` is a number here and ``None``
+there, which is exactly what the shared envelope exists to say out loud.
 
 Hint annotations
 ----------------
@@ -41,7 +50,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from ..projection import TICKET_FIELDS, parse_fields, project_many
+from ..projection import TICKET_FIELDS, collection, parse_fields
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -136,7 +145,13 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             "/tickets",
             params={"page": page, "per_page": per_page, "expand": str(expand).lower()},
         )
-        return project_many(payload, parse_fields(fields) or TICKET_FIELDS, full=full)
+        return collection(
+            payload,
+            parse_fields(fields) or TICKET_FIELDS,
+            page=page,
+            per_page=per_page,
+            full=full,
+        )
 
     @mcp.tool(
         name="search_tickets",
@@ -147,8 +162,9 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             "`created_at:>=now-7d`, and they can be combined with AND / OR. "
             "This is the right tool for open-ended questions about tickets. "
             "Results are paginated: pass `page` to go beyond the first "
-            "`limit` results, and check total_count to see whether more "
-            "matched. If a field-scoped query returns an empty list on an "
+            "`per_page` results, and read `has_more` / `total_count` in the "
+            "response to see whether more matched. If a field-scoped query "
+            "returns an empty list on an "
             "instance without a search index, fall back to "
             "`search_tickets_by_condition`, which never needs one."
         ),
@@ -159,7 +175,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     async def search_tickets(
         query: Annotated[str, Field(min_length=1, description="Zammad search query")],
         page: Annotated[int, Field(ge=1, description="1-indexed page number")] = 1,
-        limit: Annotated[
+        per_page: Annotated[
             int, Field(ge=1, le=SEARCH_MAX_LIMIT, description="Results per page (max 200)")
         ] = 25,
         sort_by: Annotated[
@@ -168,16 +184,6 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ] = None,
         order_by: Annotated[str | None, Field(description="'asc' or 'desc'")] = None,
         expand: Annotated[bool, Field(description="Inline names instead of IDs")] = True,
-        with_total_count: Annotated[
-            bool,
-            Field(
-                description=(
-                    "Include the total number of matches so you can tell a "
-                    "complete result from a truncated one. Wraps the response "
-                    "in an object with a total_count field."
-                )
-            ),
-        ] = True,
         fields: Annotated[
             str | None,
             Field(
@@ -192,20 +198,30 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             Field(description="Return Zammad's untrimmed records (large)"),
         ] = False,
     ) -> Any:
+        # with_total_count is always on. It used to be a parameter, which meant
+        # the caller could switch the response between a bare array and a
+        # wrapped object - the shape depended on a flag rather than on the tool.
+        # The total is what tells "25 matches" from "25 of 4000", and it costs
+        # one COUNT on an index Elasticsearch already built.
         params: dict[str, Any] = {
             "query": query,
             "page": page,
-            "limit": limit,
+            "per_page": per_page,
             "expand": str(expand).lower(),
+            "with_total_count": "true",
         }
-        if with_total_count:
-            params["with_total_count"] = "true"
         if sort_by:
             params["sort_by"] = sort_by
         if order_by:
             params["order_by"] = order_by
         payload = await ctx.request("GET", "/tickets/search", params=params)
-        return project_many(payload, parse_fields(fields) or TICKET_FIELDS, full=full)
+        return collection(
+            payload,
+            parse_fields(fields) or TICKET_FIELDS,
+            page=page,
+            per_page=per_page,
+            full=full,
+        )
 
     @mcp.tool(
         name="search_tickets_by_condition",
@@ -232,7 +248,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             Field(description="Zammad selector condition (see the description)"),
         ],
         page: Annotated[int, Field(ge=1, description="1-indexed page number")] = 1,
-        limit: Annotated[int, Field(ge=1, le=SEARCH_MAX_LIMIT)] = 25,
+        per_page: Annotated[int, Field(ge=1, le=SEARCH_MAX_LIMIT)] = 25,
         sort_by: Annotated[str | None, Field(description="e.g. 'updated_at'")] = None,
         order_by: Annotated[str | None, Field(description="'asc' or 'desc'")] = None,
         expand: Annotated[bool, Field(description="Inline names instead of IDs")] = True,
@@ -260,7 +276,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         payload: dict[str, Any] = {
             "condition": condition,
             "page": page,
-            "limit": limit,
+            "per_page": per_page,
             "expand": expand,
             "with_total_count": True,
         }
@@ -269,7 +285,13 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         if order_by:
             payload["order_by"] = order_by
         result = await ctx.request("POST", "/tickets/search", json=payload)
-        return project_many(result, parse_fields(fields) or TICKET_FIELDS, full=full)
+        return collection(
+            result,
+            parse_fields(fields) or TICKET_FIELDS,
+            page=page,
+            per_page=per_page,
+            full=full,
+        )
 
     @mcp.tool(
         name="count_tickets",

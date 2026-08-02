@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from ..projection import collection
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -33,7 +34,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         per_page: Annotated[int, Field(ge=1, le=100)] = 50,
         expand: Annotated[bool, Field()] = True,
     ) -> Any:
-        return await ctx.request(
+        payload = await ctx.request(
             "GET",
             "/groups",
             params={
@@ -42,6 +43,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 "expand": str(expand).lower(),
             },
         )
+        return collection(payload, page=page, per_page=per_page)
 
     @mcp.tool(
         name="get_group",

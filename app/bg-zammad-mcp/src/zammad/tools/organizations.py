@@ -17,7 +17,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from ..projection import ORGANIZATION_FIELDS, parse_fields, project_many
+from ..projection import ORGANIZATION_FIELDS, collection, parse_fields
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -62,8 +62,12 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 "expand": str(expand).lower(),
             },
         )
-        return project_many(
-            payload, parse_fields(fields) or ORGANIZATION_FIELDS, full=full
+        return collection(
+            payload,
+            parse_fields(fields) or ORGANIZATION_FIELDS,
+            page=page,
+            per_page=per_page,
+            full=full,
         )
 
     @mcp.tool(
@@ -71,7 +75,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         description=(
             "Search Zammad organizations by name or domain, using the same "
             "Elasticsearch-backed query syntax as `search_tickets`. Pass "
-            "`page` to go beyond the first `limit` results."
+            "`page` to go beyond the first `per_page` results."
         ),
         annotations=ToolAnnotations(
             readOnlyHint=True, destructiveHint=False, openWorldHint=True
@@ -80,13 +84,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     async def search_organizations(
         query: Annotated[str, Field(min_length=1)],
         page: Annotated[int, Field(ge=1, description="1-indexed page number")] = 1,
-        limit: Annotated[
+        per_page: Annotated[
             int, Field(ge=1, le=SEARCH_MAX_LIMIT, description="Results per page (max 200)")
         ] = 25,
         expand: Annotated[bool, Field()] = True,
-        with_total_count: Annotated[
-            bool, Field(description="Include the total match count alongside the page")
-        ] = True,
         fields: Annotated[
             str | None,
             Field(
@@ -104,14 +105,17 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         params: dict[str, Any] = {
             "query": query,
             "page": page,
-            "limit": limit,
+            "per_page": per_page,
             "expand": str(expand).lower(),
+            "with_total_count": "true",
         }
-        if with_total_count:
-            params["with_total_count"] = "true"
         payload = await ctx.request("GET", "/organizations/search", params=params)
-        return project_many(
-            payload, parse_fields(fields) or ORGANIZATION_FIELDS, full=full
+        return collection(
+            payload,
+            parse_fields(fields) or ORGANIZATION_FIELDS,
+            page=page,
+            per_page=per_page,
+            full=full,
         )
 
     @mcp.tool(

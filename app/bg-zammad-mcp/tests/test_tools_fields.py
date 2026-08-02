@@ -135,9 +135,9 @@ async def test_custom_attributes_and_required_flags_survive_the_trim() -> None:
     """The whole point: a model cannot otherwise learn `cost_center` exists."""
     mcp, _ = _mcp(CREATE_SCREEN)
     result = await _call(mcp, "list_ticket_fields")
-    by_name = {field["name"]: field for field in result["fields"]}
+    by_name = {field["name"]: field for field in result["items"]}
     assert set(by_name) == {"title", "group_id", "cost_center"}
-    assert result["count"] == 3
+    assert result["total_count"] == 3
     assert by_name["title"]["required"] is True
     assert by_name["cost_center"]["required"] is False
     assert by_name["cost_center"]["readonly"] is True
@@ -150,16 +150,23 @@ async def test_custom_attributes_and_required_flags_survive_the_trim() -> None:
 async def test_the_ui_blob_is_dropped() -> None:
     mcp, _ = _mcp(CREATE_SCREEN)
     result = await _call(mcp, "list_ticket_fields")
-    assert set(result) == {"count", "fields"}
+    assert set(result) == {
+        "items",
+        "returned",
+        "total_count",
+        "page",
+        "per_page",
+        "has_more",
+    }
 
 
 async def test_fields_removed_from_the_screen_are_omitted_by_default() -> None:
     mcp, _ = _mcp(CREATE_SCREEN)
     default = await _call(mcp, "list_ticket_fields")
-    assert "pending_time" not in {field["name"] for field in default["fields"]}
+    assert "pending_time" not in {field["name"] for field in default["items"]}
 
     everything = await _call(mcp, "list_ticket_fields", include_hidden=True)
-    hidden = {field["name"]: field for field in everything["fields"]}["pending_time"]
+    hidden = {field["name"]: field for field in everything["items"]}["pending_time"]
     assert hidden["visibility"] == "remove"
 
 
@@ -191,18 +198,18 @@ async def test_object_and_active_filters_are_applied_client_side() -> None:
     mcp, ctx = _mcp(OBJECT_ATTRIBUTES)
     result = await _call(mcp, "list_object_attributes", object_name="ticket")
     assert "params" not in ctx.last
-    assert [row["name"] for row in result] == ["cost_center"]
+    assert [row["name"] for row in result["items"]] == ["cost_center"]
 
     with_inactive = await _call(
         mcp, "list_object_attributes", object_name="Ticket", include_inactive=True
     )
-    assert [row["name"] for row in with_inactive] == ["cost_center", "legacy_ref"]
+    assert [row["name"] for row in with_inactive["items"]] == ["cost_center", "legacy_ref"]
 
 
 async def test_unfiltered_call_spans_every_object() -> None:
     mcp, _ = _mcp(OBJECT_ATTRIBUTES)
     result = await _call(mcp, "list_object_attributes")
-    assert [row["name"] for row in result] == ["cost_center", "vip"]
+    assert [row["name"] for row in result["items"]] == ["cost_center", "vip"]
 
 
 async def test_a_non_list_response_is_returned_untouched() -> None:

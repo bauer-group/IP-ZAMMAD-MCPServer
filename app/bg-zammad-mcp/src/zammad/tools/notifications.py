@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from ..projection import collection
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -37,7 +38,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         annotations=read_only,
     )
     async def list_my_notifications() -> Any:
-        return await ctx.request("GET", "/online_notifications")
+        return collection(await ctx.request("GET", "/online_notifications"))
 
     @mcp.tool(
         name="mark_all_notifications_read",

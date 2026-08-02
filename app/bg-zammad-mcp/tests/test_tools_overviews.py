@@ -119,10 +119,10 @@ async def test_list_queue_tickets_sends_the_view_slug() -> None:
 async def test_list_queue_tickets_flattens_assets_in_index_order() -> None:
     mcp, _ = _build(VIEW_PAYLOAD)
     result = await _run(mcp, "list_queue_tickets", view="my_assigned")
-    assert [t["id"] for t in result["tickets"]] == [42, 7]
-    assert result["tickets"][0]["title"] == "Printer smokes"
+    assert [t["id"] for t in result["items"]] == [42, 7]
+    assert result["items"][0]["title"] == "Printer smokes"
     assert result["total_count"] == 137
-    assert result["fetched_count"] == 2
+    assert result["returned"] == 2
     assert result["overview"]["view"] == "my_assigned"
 
 
@@ -135,7 +135,7 @@ async def test_list_queue_tickets_accepts_integer_asset_keys() -> None:
     }
     mcp, _ = _build(payload)
     result = await _run(mcp, "list_queue_tickets", view="my_assigned")
-    assert result["tickets"][0]["title"] == "Printer smokes"
+    assert result["items"][0]["title"] == "Printer smokes"
 
 
 async def test_ticket_missing_from_assets_degrades_to_its_stub() -> None:
@@ -147,7 +147,7 @@ async def test_ticket_missing_from_assets_degrades_to_its_stub() -> None:
     }
     mcp, _ = _build(payload)
     result = await _run(mcp, "list_queue_tickets", view="my_assigned")
-    assert result["tickets"] == [{"id": 99, "updated_at": "x"}]
+    assert result["items"] == [{"id": 99, "updated_at": "x"}]
 
 
 async def test_unknown_view_raises_instead_of_looking_like_an_empty_queue() -> None:
@@ -164,7 +164,7 @@ async def test_pagination_is_local_and_never_sent_upstream() -> None:
     mcp, ctx = _build(VIEW_PAYLOAD)
     result = await _run(mcp, "list_queue_tickets", view="my_assigned", page=2, per_page=1)
     assert ctx.last["params"] == {"view": "my_assigned"}
-    assert [t["id"] for t in result["tickets"]] == [7]
+    assert [t["id"] for t in result["items"]] == [7]
     assert result["page"] == 2
     assert result["per_page"] == 1
     # The true queue size must survive slicing, or a page reads as the whole queue.
@@ -174,5 +174,5 @@ async def test_pagination_is_local_and_never_sent_upstream() -> None:
 async def test_page_beyond_the_end_returns_no_tickets_not_an_error() -> None:
     mcp, _ = _build(VIEW_PAYLOAD)
     result = await _run(mcp, "list_queue_tickets", view="my_assigned", page=9, per_page=25)
-    assert result["tickets"] == []
+    assert result["items"] == []
     assert result["total_count"] == 137

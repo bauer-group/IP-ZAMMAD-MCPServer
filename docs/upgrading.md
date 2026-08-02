@@ -14,6 +14,86 @@ rollback is a tag change.
 
 ---
 
+## 2.1.0
+
+One response shape for every collection, and one pagination vocabulary. This is
+the second half of the 2.0.0 unification: that release made similar operations
+*take* the same arguments, this one makes them *return* the same thing.
+
+### Every collection returns the same envelope
+
+```json
+{"items": [...], "returned": 25, "total_count": 412, "page": 1, "per_page": 25, "has_more": true}
+```
+
+Twenty tools previously returned nine different shapes: a bare array from
+`list_tickets`, `{records, total_count}` from `search_tickets`, `{count,
+fields}` from `list_ticket_fields`, `{total, items, open}` from
+`get_ticket_checklist`, `{ticket_id, entry_count, history}` from
+`get_ticket_history`, `{overview, total_count, fetched_count, page, per_page,
+tickets}` from `list_queue_tickets`, and so on. Six different spellings of "how
+many": `total_count`, `count`, `total`, `returned`, `entry_count`,
+`fetched_count`.
+
+Worse than the count of shapes was that three tools **changed shape based on a
+parameter**: `search_tickets`, `search_users` and `search_organizations`
+returned a wrapped object with `with_total_count=true` (the default) and a bare
+array with `false`. Code written against one call could break on the next.
+
+**What to do:** read `result["items"]` where you previously read the array, the
+`records` key, or a domain key like `tickets` / `fields` / `history`.
+
+### `with_total_count` is gone as a parameter
+
+It is now always on for search tools. It only ever existed to let a caller
+reshape the response, which is precisely the thing being removed; the total is
+what distinguishes "25 matches" from "25 of 4000", and it costs one count on an
+index Elasticsearch has already built.
+
+### `has_more` is three-valued — do not treat `null` as `false`
+
+* `false` — proven complete. The page came back short, or a known total is
+  exhausted.
+* `true` — proven incomplete.
+* `null` — a full page with no total available. Genuinely unknown; fetch the
+  next page to find out.
+
+Zammad's index actions ignore `with_total_count` and answer with a bare array
+(measured on 7.1.1), so `list_*` tools genuinely cannot know the total until
+they reach the end — at which point it becomes arithmetic and is reported.
+Search actions know it from the first page. Guessing `false` in the unknown case
+is the expensive direction: a model stops paging and reports a partial answer
+as complete.
+
+### `limit` is now `per_page` everywhere
+
+Affects `search_tickets`, `search_tickets_by_condition`, `search_users`,
+`search_organizations` and `list_ticket_articles`. Zammad accepts both spellings
+interchangeably on both index and search actions — verified on 7.1.1, where
+`/tickets?limit=3&page=2` and `?per_page=3&page=2` return the same window — so
+the split published two words for one concept with nothing to distinguish them.
+The differing ceilings are real and remain: 100 on index-backed `list_*`, 200 on
+`search_*`.
+
+`list_ticket_articles` gains a real `page` in the trade. Its old `limit` could
+only ever reach one end of a thread; the middle of a long conversation was
+unreachable without pulling all of it.
+
+### Smaller consequences
+
+* `get_ticket_checklist` answered "no checklist" with a differently-shaped
+  object than "here is the checklist", so a caller had to branch on a condition
+  it could not see before calling. Both paths now return the envelope, with
+  `open` renamed `open_items`.
+* `list_queue_tickets` reported `fetched_count` as the size of the whole joined
+  queue rather than of the page it returned, so a 5-ticket page out of 200
+  claimed to have fetched 200. `returned` is computed from what ships.
+* `list_ticket_attachments` and `list_object_attributes` returned bare arrays
+  and now return the envelope; `total_count` equals `returned` for them, because
+  those endpoints ignore pagination and always send everything.
+
+---
+
 ## 1.0.0
 
 The tool surface grew from 36 to 75 tools and several long-standing defects were
