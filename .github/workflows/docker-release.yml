@@ -90,7 +90,14 @@ jobs:
       release-version: ${{ needs.release.outputs.version }}
       image-tags: 'stable'
 
-      update-dockerfile-version: true
+      # semantic-release already stamps the Dockerfile version and commits it
+      # (see .github/config/release/semantic-release.json — prepareCmd + git
+      # assets), so the reusable workflow must NOT also try to. When both do,
+      # its "Commit Dockerfile Version Update" step rewrites the file, then
+      # fails to pull the release commit on top of its own unstaged change:
+      #   error: Your local changes ... would be overwritten by merge
+      # and the job exits 128 AFTER a perfectly good image has been pushed.
+      update-dockerfile-version: false
       auto-tags: true
       latest-tag: true
 
@@ -100,16 +107,10 @@ jobs:
 
       push: true
 
-      # Disabled again after v1.0.0. Enabling it does NOT block a bad image —
-      # the scan runs AFTER the push (the v1.0.0 image reached GHCR at 14:38:22,
-      # the job failed at 14:38:38) — and its SARIF upload step in
-      # automation-templates exits 128, a git error, on every run. The result was
-      # a permanently red release job that reports nothing, which is worse than
-      # no scan: it trains everyone to ignore the pipeline.
-      #
-      # security-fail-on and the security-events permission are kept so this is a
-      # one-line re-enable once the template's upload step is fixed upstream.
-      security-scan: false
+      # Trivy runs BEFORE the push and gates it (v1.0.0 run: scan 14:38:06,
+      # push 14:38:18), and the template treats a scan that could not run as a
+      # finding — so this genuinely blocks a CRITICAL image from reaching GHCR.
+      security-scan: true
       security-fail-on: 'CRITICAL'
       generate-sbom: true
       sync-dockerhub-readme: true
