@@ -60,7 +60,9 @@ async def _tools(mcp: FastMCP) -> dict[str, Any]:
     return {tool.name: tool for tool in await mcp.list_tools(run_middleware=False)}
 
 
-async def _call(mcp: FastMCP, name: str, **kwargs: Any) -> Any:
+async def _call(mcp: FastMCP, name: str, /, **kwargs: Any) -> Any:
+    # positional-only: several tools have their own `name` parameter
+    # (create_organization, for one), which would collide otherwise.
     return await (await _tools(mcp))[name].run(kwargs)
 
 
