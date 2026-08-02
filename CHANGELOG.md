@@ -1,3 +1,32 @@
+## [1.0.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.10...v1.0.0) (2026-08-02)
+
+### ⚠ BREAKING CHANGES
+
+* **tools:** suggest_kb_answers is renamed to
+draft_kb_answer_from_ticket and no longer returns knowledge-base
+suggestions. Use search_knowledge_base to find existing answers.
+* **tools:** create_ticket_article is replaced by reply_to_customer
+and add_internal_note. create_ticket's `type` parameter is renamed to
+`ticket_type`, and its opening article is customer-visible by default.
+
+### 🚀 Features
+
+* **profile:** added prompts, resources and the framework registry tools ([ccec77b](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/ccec77bb10633d9b8856918a442006e0a344db53))
+* **tools:** added the Zammad 7 workflow surface (36 -> 75 tools) ([3c5bb8c](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/3c5bb8c2ab9dbffc5a2adab73fb9e31c1f52ef90)), closes [#show](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/issues/show)
+* **tools:** split the article write path by visibility and fixed search ([3969d4b](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/3969d4b31740b89bb9fb919462c45bbe5fd84e0c))
+
+### 🐛 Bug Fixes
+
+* **auth:** corrected the OAuth scope and added fail-closed boot guards ([10b964a](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/10b964a323ad06f3b1039b97df9fafd02605626e))
+* **docker:** made the image test stage a real gate ([1813e81](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/1813e812a87ff9a106733507a417b3b60ab8e7cb))
+* **test:** pinned the OAuth store path in the wiring fixture ([91483d6](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/91483d6c16d0af7438f7a7627381807200d5b35f))
+* **tools:** corrected the knowledge-base AI tool to match its endpoint ([19fcf51](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/19fcf512c1303d922e90f9426779e2d360328607)), closes [KnowledgeBaseAnswersController#create](https://github.com/bauer-group/KnowledgeBaseAnswersController/issues/create)
+
+### ⚡ Performance
+
+* **auth:** pooled the verifier client, cached verifications, hardened DCR ([c7d3367](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/c7d336735fcf8684a23916b8fe2fbe03e8ef545b))
+* **tools:** trimmed list responses and tagged the surface ([3ccf127](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/3ccf127563da0dc0e4960bce8fa45496235f8e5b))
+
 ## [0.1.10](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.9...v0.1.10) (2026-07-31)
 
 ## [0.1.9](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.8...v0.1.9) (2026-07-25)
