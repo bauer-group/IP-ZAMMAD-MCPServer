@@ -97,3 +97,20 @@ docker compose -p zammad7 up -d
 Then create an API token and point the server at it with `AUTH_MODE=none`. Note
 that `AUTH_MODE=zammad` needs an **HTTPS** `PUBLIC_BASE_URL` — Zammad refuses to
 register an OAuth application with an `http://` callback.
+
+### The on-behalf-of proof
+
+`tests/test_integration_obo.py` is the one test that proves the property this
+server exists for: that a call runs with the **logged-in user's** Zammad rights
+rather than a shared identity. It is skipped unless you point it at an instance:
+
+```bash
+ZAMMAD_TEST_URL=http://localhost:8080 ZAMMAD_TEST_TOKEN_RESTRICTED=<OAuth token of an agent with limited groups> ZAMMAD_TEST_TOKEN_ADMIN=<OAuth token of an agent who sees more>   pytest tests/test_integration_obo.py -m integration
+```
+
+Both tokens must come from Zammad's real authorization-code flow (sign in,
+`/oauth/authorize` with PKCE, exchange at `/oauth/token`), not from a Personal
+Access Token — a PAT is exactly the shared-identity path the test exists to rule
+out. Give the two agents access to **different groups**, otherwise the decisive
+assertion (two users, same call, different answers) cannot distinguish per-user
+context from a shared token.

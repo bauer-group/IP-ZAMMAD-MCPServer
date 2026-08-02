@@ -113,8 +113,12 @@ Single tickets go through `apply_macro_to_tickets` too, with a one-element list
 ## 6. Bulk-close a batch
 
 ```text
-update_tickets(ticket_ids=[…], state="closed")
+update_tickets(ticket_ids=[…], attributes={"state": "closed"})
 ```
+
+Note the shape: the field changes go in `attributes`, not as top-level
+arguments — that is Zammad's `mass_update` body, and getting it wrong is a
+schema error rather than a silent no-op.
 
 One transaction: if any ticket is refused, nothing changes and the error names
 the blocking tickets. Capped at 100 ids per call. This is annotated
@@ -142,8 +146,9 @@ never reported as success. It is not reversible — read both tickets first.
 count_tickets(query="state.name:open")
 ```
 
-Returns only the count. For anything where the *set* matters and the instance
-may lack Elasticsearch, use the index-independent structured search:
+Returns only the count. When the *set* matters and the filter is exact — a
+fixed list of states, one organization, a date window — prefer the structured
+search, which is unambiguous and never touches the search index:
 
 ```text
 search_tickets_by_condition(condition={
@@ -175,6 +180,19 @@ add_ticket_time_entry(ticket_id=4711, time_unit=45)
 
 Time accounting is a separate Zammad feature and may be switched off; the tool
 says so explicitly rather than failing opaquely.
+
+---
+
+## 11. Verify the server really acts as you
+
+```text
+get_me
+```
+
+Everything runs under the Zammad identity that logged in, so `get_me` is the
+cheapest sanity check that the connection is what you think it is. If a
+colleague's ticket is invisible to you, that is Zammad's group permissions
+doing their job — not a missing tool.
 
 ---
 
