@@ -23,6 +23,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from ..projection import USER_FIELDS, parse_fields, project_many
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -67,8 +68,21 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         page: Annotated[int, Field(ge=1)] = 1,
         per_page: Annotated[int, Field(ge=1, le=100)] = 25,
         expand: Annotated[bool, Field(description="Inline role names")] = True,
+        fields: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Comma-separated whitelist of fields to keep, e.g. "
+                    "'id,number,title,state'. Overrides the default projection."
+                )
+            ),
+        ] = None,
+        full: Annotated[
+            bool,
+            Field(description="Return Zammad's untrimmed records (large)"),
+        ] = False,
     ) -> Any:
-        return await ctx.request(
+        payload = await ctx.request(
             "GET",
             "/users",
             params={
@@ -77,6 +91,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 "expand": str(expand).lower(),
             },
         )
+        return project_many(payload, parse_fields(fields) or USER_FIELDS, full=full)
 
     @mcp.tool(
         name="search_users",
@@ -100,6 +115,19 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         with_total_count: Annotated[
             bool, Field(description="Include the total match count alongside the page")
         ] = True,
+        fields: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Comma-separated whitelist of fields to keep, e.g. "
+                    "'id,number,title,state'. Overrides the default projection."
+                )
+            ),
+        ] = None,
+        full: Annotated[
+            bool,
+            Field(description="Return Zammad's untrimmed records (large)"),
+        ] = False,
     ) -> Any:
         params: dict[str, Any] = {
             "query": query,
@@ -109,7 +137,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         }
         if with_total_count:
             params["with_total_count"] = "true"
-        return await ctx.request("GET", "/users/search", params=params)
+        payload = await ctx.request("GET", "/users/search", params=params)
+        return project_many(payload, parse_fields(fields) or USER_FIELDS, full=full)
 
     @mcp.tool(
         name="get_user",

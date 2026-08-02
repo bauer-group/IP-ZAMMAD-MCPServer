@@ -139,3 +139,43 @@ async def test_audit_records_identifiers_but_not_content(audited_server) -> None
     rendered = repr(events)
     assert secret not in rendered
     assert "hunter2" not in rendered
+
+
+# ── tool tags ────────────────────────────────────────────────────────────────
+
+
+async def test_every_tool_carries_a_tag() -> None:
+    """With 75 tools the published list is itself a slice of a client's context.
+
+    Tags are how an operator or client talks about a subset ("the ticket half",
+    "read-only only"), so an untagged tool is invisible to that filtering — and
+    a new module is exactly the thing that would arrive untagged.
+    """
+    import server
+
+    mcp: FastMCP = FastMCP("tag-test")
+    server.register(mcp, RecordingCtx())
+    untagged = [t.name for t in await mcp.list_tools(run_middleware=False) if not t.tags]
+    assert not untagged, f"tools registered without a tag: {sorted(untagged)}"
+
+
+async def test_tag_vocabulary_stays_closed() -> None:
+    """A typo'd tag is worse than no tag: it silently creates a group of one."""
+    import server
+
+    allowed = {
+        "tickets",
+        "worklist",
+        "communication",
+        "bulk",
+        "audit",
+        "knowledge",
+        "ai",
+        "people",
+        "reference",
+        "reporting",
+    }
+    mcp: FastMCP = FastMCP("tag-vocab-test")
+    server.register(mcp, RecordingCtx())
+    used = {tag for t in await mcp.list_tools(run_middleware=False) for tag in t.tags}
+    assert used <= allowed, f"unexpected tags: {sorted(used - allowed)}"

@@ -41,6 +41,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from ..projection import TICKET_FIELDS, parse_fields, project_many
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -77,12 +78,26 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             bool,
             Field(description="Inline state/priority/owner names instead of IDs"),
         ] = True,
+        fields: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Comma-separated whitelist of fields to keep, e.g. "
+                    "'id,number,title,state'. Overrides the default projection."
+                )
+            ),
+        ] = None,
+        full: Annotated[
+            bool,
+            Field(description="Return Zammad's untrimmed records (large)"),
+        ] = False,
     ) -> Any:
-        return await ctx.request(
+        payload = await ctx.request(
             "GET",
             "/tickets",
             params={"page": page, "per_page": per_page, "expand": str(expand).lower()},
         )
+        return project_many(payload, parse_fields(fields) or TICKET_FIELDS, full=full)
 
     @mcp.tool(
         name="search_tickets",
@@ -123,6 +138,19 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 )
             ),
         ] = True,
+        fields: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Comma-separated whitelist of fields to keep, e.g. "
+                    "'id,number,title,state'. Overrides the default projection."
+                )
+            ),
+        ] = None,
+        full: Annotated[
+            bool,
+            Field(description="Return Zammad's untrimmed records (large)"),
+        ] = False,
     ) -> Any:
         params: dict[str, Any] = {
             "query": query,
@@ -136,7 +164,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             params["sort_by"] = sort_by
         if order_by:
             params["order_by"] = order_by
-        return await ctx.request("GET", "/tickets/search", params=params)
+        payload = await ctx.request("GET", "/tickets/search", params=params)
+        return project_many(payload, parse_fields(fields) or TICKET_FIELDS, full=full)
 
     @mcp.tool(
         name="search_tickets_by_condition",
@@ -166,6 +195,19 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         sort_by: Annotated[str | None, Field(description="e.g. 'updated_at'")] = None,
         order_by: Annotated[str | None, Field(description="'asc' or 'desc'")] = None,
         expand: Annotated[bool, Field(description="Inline names instead of IDs")] = True,
+        fields: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Comma-separated whitelist of fields to keep, e.g. "
+                    "'id,number,title,state'. Overrides the default projection."
+                )
+            ),
+        ] = None,
+        full: Annotated[
+            bool,
+            Field(description="Return Zammad's untrimmed records (large)"),
+        ] = False,
     ) -> Any:
         if not condition:
             raise ToolError(
@@ -185,7 +227,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             payload["sort_by"] = sort_by
         if order_by:
             payload["order_by"] = order_by
-        return await ctx.request("POST", "/tickets/search", json=payload)
+        result = await ctx.request("POST", "/tickets/search", json=payload)
+        return project_many(result, parse_fields(fields) or TICKET_FIELDS, full=full)
 
     @mcp.tool(
         name="count_tickets",

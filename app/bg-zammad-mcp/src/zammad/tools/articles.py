@@ -35,6 +35,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from ..projection import trim_articles
 from . import ToolContext
 
 if TYPE_CHECKING:
@@ -50,12 +51,14 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     @mcp.tool(
         name="list_ticket_articles",
         description=(
-            "List all articles (messages, notes, replies) for a given ticket. "
-            "Articles include the body text, sender, article type, timing "
-            "metadata, and whether the article is internal (hidden from the "
-            "customer) - useful to summarise ticket history. Note: Zammad does "
-            "not paginate this endpoint and returns full article bodies, so a "
-            "long e-mail thread can be large."
+            "List the articles (messages, notes, replies) on a ticket: body, "
+            "sender, type, timing, and whether the article is internal (hidden "
+            "from the customer). Bodies are converted from HTML to plain text "
+            "and shortened to `max_body_chars`; raise it when you need a verbatim "
+            "quote. Zammad does not paginate this endpoint, so a long e-mail "
+            "thread arrives in one response - use `limit` with "
+            "`newest_first=True` to read just the recent end of a conversation. "
+            "Set `full=True` for Zammad's untouched payload."
         ),
         annotations=ToolAnnotations(
             readOnlyHint=True, destructiveHint=False, openWorldHint=True
@@ -63,12 +66,34 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     )
     async def list_ticket_articles(
         ticket_id: Annotated[int, Field(ge=1)],
+        limit: Annotated[
+            int | None,
+            Field(ge=1, description="Return at most this many articles (default: all)"),
+        ] = None,
+        newest_first: Annotated[
+            bool,
+            Field(description="Read the recent end of the thread first"),
+        ] = False,
+        max_body_chars: Annotated[
+            int,
+            Field(ge=0, le=100_000, description="Per-article body cap; 0 disables"),
+        ] = 4000,
+        full: Annotated[
+            bool, Field(description="Return Zammad's raw payload, untrimmed")
+        ] = False,
         expand: Annotated[bool, Field(description="Inline sender/type names")] = True,
     ) -> Any:
-        return await ctx.request(
+        payload = await ctx.request(
             "GET",
             f"/ticket_articles/by_ticket/{ticket_id}",
             params={"expand": str(expand).lower()},
+        )
+        return trim_articles(
+            payload,
+            max_body_chars=max_body_chars,
+            limit=limit,
+            newest_first=newest_first,
+            full=full,
         )
 
     @mcp.tool(
