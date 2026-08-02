@@ -158,6 +158,16 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             bool, Field(description="Auto-assign users with this domain")
         ] = False,
         note: Annotated[str | None, Field(max_length=2000)] = None,
+        extra_fields: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description=(
+                    "Custom Object-Manager attributes to set, as a name/value "
+                    "map. Use `list_object_attributes` to discover which exist "
+                    "on this instance."
+                )
+            ),
+        ] = None,
         active: Annotated[bool, Field()] = True,
         shared: Annotated[
             bool,
@@ -192,10 +202,20 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         domain: Annotated[str | None, Field()] = None,
         domain_assignment: Annotated[bool | None, Field()] = None,
         note: Annotated[str | None, Field(max_length=2000)] = None,
+        extra_fields: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description=(
+                    "Custom Object-Manager attributes to set, as a name/value "
+                    "map. Use `list_object_attributes` to discover which exist "
+                    "on this instance."
+                )
+            ),
+        ] = None,
         active: Annotated[bool | None, Field()] = None,
         shared: Annotated[bool | None, Field()] = None,
     ) -> Any:
-        payload: dict[str, Any] = {}
+        payload: dict[str, Any] = dict(extra_fields or {})
         if name is not None:
             payload["name"] = name
         if domain is not None:

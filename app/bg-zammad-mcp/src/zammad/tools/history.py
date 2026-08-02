@@ -53,6 +53,7 @@ from pydantic import Field
 
 from ..projection import envelope
 from . import ToolContext
+from .tickets import VISIBILITY
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -179,9 +180,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             "message filed with the wrong audience. The case this exists for: an "
             "e-mail that WAS delivered to the customer but was flagged internal, "
             "so the customer cannot find it in their own ticket view and the "
-            "thread looks like it was never answered. Pass `internal` as false "
-            "to put such an article back in front of the customer, or true to "
-            "pull a note that should never have been public out of their view. "
+            "thread looks like it was never answered. Pass "
+            "`visibility='customer_visible'` to put such an article back in "
+            "front of the customer, or 'internal' to pull a note that should "
+            "never have been public out of their view. "
             "Sharp edges: (1) Zammad accepts NOTHING else on this endpoint - "
             "body, subject, type, recipients are silently ignored and the call "
             "still returns HTTP 200, so wrong CONTENT is corrected with "
@@ -200,23 +202,29 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     )
     async def set_article_visibility(
         article_id: Annotated[int, Field(ge=1, description="Numeric article ID")],
-        internal: Annotated[
-            bool,
+        visibility: Annotated[
+            str,
             Field(
                 description=(
-                    "false = the customer can see the article; true = agents "
-                    "only. This is the article's own visibility flag, the same "
-                    "one reported by list_ticket_articles."
+                    "'customer_visible' or 'internal' - the same vocabulary "
+                    "create_ticket, update_ticket and update_tickets use. This "
+                    "sets the article's own visibility flag, the one reported "
+                    "as `internal` by list_ticket_articles."
                 )
             ),
         ],
     ) -> Any:
+        if visibility not in VISIBILITY:
+            raise ToolError(
+                f"visibility must be one of {', '.join(VISIBILITY)} "
+                f"(got {visibility!r})."
+            )
         # A JSON body carries a real boolean - only query params need the
         # lowercase string form Zammad's param casting expects.
         return await ctx.request(
             "PUT",
             f"/ticket_articles/{article_id}",
-            json={"internal": internal},
+            json={"internal": visibility == "internal"},
         )
 
     @mcp.tool(

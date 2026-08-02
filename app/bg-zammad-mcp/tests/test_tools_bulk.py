@@ -99,7 +99,7 @@ async def test_description_only_names_real_parameters(mcp_and_ctx) -> None:  # t
 
 async def test_attributes_are_nested_under_the_attributes_key(mcp_and_ctx) -> None:  # type: ignore[no-untyped-def]
     mcp, ctx = mcp_and_ctx
-    await _call(mcp, "update_tickets", ticket_ids=[1, 2, 3], attributes={"state_id": 4})
+    await _call(mcp, "update_tickets", ticket_ids=[1, 2, 3], state_id=4)
     assert ctx.last["method"] == "POST"
     assert ctx.last["path"] == "/tickets/mass_update"
     assert ctx.last["json"] == {"ticket_ids": [1, 2, 3], "attributes": {"state_id": 4}}
@@ -107,11 +107,77 @@ async def test_attributes_are_nested_under_the_attributes_key(mcp_and_ctx) -> No
 
 async def test_association_names_and_custom_fields_pass_through_untouched(mcp_and_ctx) -> None:  # type: ignore[no-untyped-def]
     """Zammad's association_name_to_id_convert resolves names server-side, and
-    custom Object-Manager fields are ordinary keys - neither may be filtered."""
+    custom Object-Manager fields are ordinary keys - neither may be filtered.
+
+    The two arrive by different doors on purpose: associations are named
+    arguments because they are the same five every ticket has, custom fields go
+    through extra_fields because their names differ per instance. Both land in
+    the same flat payload, which is what Zammad expects.
+    """
     mcp, ctx = mcp_and_ctx
-    attributes = {"state": "closed", "group": "2nd Level", "cost_center": "CC-42"}
-    await _call(mcp, "update_tickets", ticket_ids=[9], attributes=attributes)
-    assert ctx.last["json"]["attributes"] == attributes
+    await _call(
+        mcp,
+        "update_tickets",
+        ticket_ids=[9],
+        state="closed",
+        group="2nd Level",
+        extra_fields={"cost_center": "CC-42"},
+    )
+    assert ctx.last["json"]["attributes"] == {
+        "state": "closed",
+        "group": "2nd Level",
+        "cost_center": "CC-42",
+    }
+
+
+async def test_bulk_takes_the_same_arguments_as_the_single_update() -> None:
+    """`update_tickets` used to take a generic `attributes` bag while
+    `update_ticket` took named parameters, so knowing one taught you nothing
+    about the other — a model that had just called update_ticket(state='closed')
+    wrote update_tickets(state='closed') and got a validation error."""
+    # Both modules in one server: the invariant lives BETWEEN them, so a test
+    # scoped to either file could not see it.
+    from zammad.tools import tickets
+
+    mcp: FastMCP = FastMCP("bulk-vs-single")
+    ctx = RecordingCtx()
+    bulk.register(mcp, ctx)
+    tickets.register(mcp, ctx)
+    tools = {t.name: t for t in await mcp.list_tools(run_middleware=False)}
+    single = set((tools["update_ticket"].parameters or {}).get("properties", {}))
+    batch = set((tools["update_tickets"].parameters or {}).get("properties", {}))
+
+    shared = {
+        "state",
+        "state_id",
+        "pending_time",
+        "priority",
+        "priority_id",
+        "owner",
+        "owner_id",
+        "group",
+        "group_id",
+        "customer",
+        "customer_id",
+        "extra_fields",
+        "article_body",
+        "article_visibility",
+    }
+    assert shared <= single, f"update_ticket is missing {sorted(shared - single)}"
+    assert shared <= batch, f"update_tickets is missing {sorted(shared - batch)}"
+    assert "attributes" not in batch, "the generic bag is gone"
+
+
+@pytest.mark.parametrize("field", ["group", "owner", "customer"])
+async def test_bulk_refuses_a_name_and_id_for_the_same_association(  # type: ignore[no-untyped-def]
+    mcp_and_ctx, field: str
+) -> None:
+    """The same guard as the single update: Zammad accepts both and silently
+    applies one, so half the change vanishes without an error."""
+    mcp, ctx = mcp_and_ctx
+    with pytest.raises(Exception, match="not both"):
+        await _call(mcp, "update_tickets", ticket_ids=[1], **{field: "x", f"{field}_id": 3})
+    assert ctx.calls == []
 
 
 async def test_article_rides_along_in_the_same_call(mcp_and_ctx) -> None:  # type: ignore[no-untyped-def]
@@ -120,7 +186,7 @@ async def test_article_rides_along_in_the_same_call(mcp_and_ctx) -> None:  # typ
         mcp,
         "update_tickets",
         ticket_ids=[5],
-        attributes={"state": "closed"},
+        state="closed",
         article_body="Closed after the maintenance window.",
         article_subject="Maintenance",
     )
@@ -145,7 +211,7 @@ async def test_an_article_alone_is_a_valid_batch(mcp_and_ctx) -> None:  # type: 
 async def test_more_than_one_hundred_ids_is_refused(mcp_and_ctx) -> None:  # type: ignore[no-untyped-def]
     mcp, ctx = mcp_and_ctx
     with pytest.raises(Exception, match="at most 100 ticket ids"):
-        await _call(mcp, "update_tickets", ticket_ids=list(range(1, 102)), attributes={"x": 1})
+        await _call(mcp, "update_tickets", ticket_ids=list(range(1, 102)), state_id=4)
     assert not ctx.calls, "the oversized batch must never reach Zammad"
 
 
@@ -213,7 +279,7 @@ async def test_rollback_surfaces_the_failing_ticket_id() -> None:
     )
     bulk.register(mcp, ctx)
     with pytest.raises(Exception, match="4711"):
-        await _call(mcp, "update_tickets", ticket_ids=[4710, 4711], attributes={"state": "closed"})
+        await _call(mcp, "update_tickets", ticket_ids=[4710, 4711], state="closed")
 
 
 async def test_a_422_without_a_ticket_id_is_left_alone() -> None:
@@ -224,7 +290,7 @@ async def test_a_422_without_a_ticket_id_is_left_alone() -> None:
     )
     bulk.register(mcp, ctx)
     with pytest.raises(Exception, match="Group required"):
-        await _call(mcp, "update_tickets", ticket_ids=[1], attributes={"state": "closed"})
+        await _call(mcp, "update_tickets", ticket_ids=[1], state="closed")
 
 
 async def test_other_zammad_errors_are_not_swallowed() -> None:
@@ -232,4 +298,4 @@ async def test_other_zammad_errors_are_not_swallowed() -> None:
     ctx = RaisingCtx(ZammadForbidden("Not authorized", status_code=403))
     bulk.register(mcp, ctx)
     with pytest.raises(Exception, match="Not authorized"):
-        await _call(mcp, "update_tickets", ticket_ids=[1], attributes={"state": "closed"})
+        await _call(mcp, "update_tickets", ticket_ids=[1], state="closed")

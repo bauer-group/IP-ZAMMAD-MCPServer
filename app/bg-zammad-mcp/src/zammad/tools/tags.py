@@ -93,15 +93,15 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     )
     async def add_tag(
         object_id: Annotated[int, Field(ge=1)],
-        item: Annotated[str, Field(min_length=1, description="Tag name")],
+        tag: Annotated[str, Field(min_length=1, description="Tag name")],
         object_type: Annotated[str, Field(description="Object type")] = "Ticket",
     ) -> dict[str, Any]:
         await ctx.request(
             "POST",
             "/tags/add",
-            params={"object": object_type, "o_id": object_id, "item": item},
+            params={"object": object_type, "o_id": object_id, "item": tag},
         )
-        return {"added": True, "object_type": object_type, "object_id": object_id, "tag": item}
+        return {"added": True, "object_type": object_type, "object_id": object_id, "tag": tag}
 
     @mcp.tool(
         name="remove_tag",
@@ -115,14 +115,14 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     )
     async def remove_tag(
         object_id: Annotated[int, Field(ge=1)],
-        item: Annotated[str, Field(min_length=1, description="Tag name")],
+        tag: Annotated[str, Field(min_length=1, description="Tag name")],
         object_type: Annotated[str, Field(description="Object type")] = "Ticket",
     ) -> dict[str, Any]:
         await ctx.request(
             "DELETE",
             "/tags/remove",
-            params={"object": object_type, "o_id": object_id, "item": item},
+            params={"object": object_type, "o_id": object_id, "item": tag},
         )
-        return {"removed": True, "object_type": object_type, "object_id": object_id, "tag": item}
+        return {"removed": True, "object_type": object_type, "object_id": object_id, "tag": tag}
 
     return 5

@@ -14,6 +14,56 @@ rollback is a tag change.
 
 ---
 
+## 3.1.0
+
+Found by calling all 77 tools against a live Zammad 7.1.1 rather than by
+reading them. Four more places where the same concept had two names, plus two
+gaps where a field was reachable on one object and not its neighbour.
+
+### `set_article_visibility(internal=…)` → `visibility=…`
+
+Takes `'customer_visible'` or `'internal'` — the vocabulary `create_ticket`,
+`update_ticket` and `update_tickets` already use. It was the last bare
+`internal: bool` on the surface, which is the exact shape
+`create_ticket_article` was split in two to remove; a boolean also gives no
+hint which way round it goes.
+
+### `add_tag(item=…)` / `remove_tag(item=…)` → `tag=…`
+
+The parameter was named after Zammad's wire parameter while the RESPONSE was
+named after the concept, so a single call spoke both dialects at once: you
+passed `item` and got back `{"tag": …}`.
+
+### `update_tickets` takes the same arguments as `update_ticket`
+
+The generic `attributes={...}` bag is gone, replaced by the same named
+parameters the single-ticket tool has (`state`, `state_id`, `pending_time`,
+`priority`, `priority_id`, `owner`, `owner_id`, `group`, `group_id`,
+`customer`, `customer_id`) plus `extra_fields` for custom attributes. Knowing
+one tool taught you nothing about the other, so
+`update_tickets(state='closed')` — the natural thing to write after
+`update_ticket(state='closed')` — was a validation error.
+
+It also inherits the name-or-ID guard: passing `group` and `group_id` together
+is refused rather than silently half-applied.
+
+### `update_ticket` accepts associations by name
+
+`group`, `owner` and `customer` join the `_id` forms it already had.
+`create_ticket` took names, `update_ticket` took only IDs, so moving a ticket to
+a group you had just created one in meant going to find an ID first. The guard
+covers all five associations now, not just state and priority.
+
+### `note` and `extra_fields` on users and organizations
+
+`create_user` and `update_user` gain `note` — Zammad's User carries that column
+exactly as Organization does (verified on 7.1.1), it simply was not offered.
+All four user/organization write tools gain `extra_fields`, so custom
+Object-Manager attributes are reachable there as they already were on tickets.
+Both are additive.
+
+---
+
 ## 2.1.0
 
 One response shape for every collection, and one pagination vocabulary. This is

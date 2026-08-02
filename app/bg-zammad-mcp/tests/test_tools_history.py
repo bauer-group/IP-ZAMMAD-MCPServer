@@ -288,17 +288,30 @@ async def test_history_survives_an_empty_log() -> None:
 # ── set_article_visibility ───────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("internal", [True, False])
+@pytest.mark.parametrize(
+    ("visibility", "internal"), [("internal", True), ("customer_visible", False)]
+)
 async def test_set_article_visibility_puts_a_real_boolean(  # type: ignore[no-untyped-def]
-    history_tools, internal: bool
+    history_tools, visibility: str, internal: bool
 ) -> None:
-    """``internal`` travels in a JSON body, so it stays a real boolean - the
-    lowercase-string dance only applies to query params."""
+    """The tool speaks the shared vocabulary; Zammad speaks a boolean, in a JSON
+    body, so it stays a real boolean - the lowercase-string dance only applies
+    to query params."""
     mcp, ctx = history_tools
-    await _call(mcp, "set_article_visibility", article_id=42, internal=internal)
+    await _call(mcp, "set_article_visibility", article_id=42, visibility=visibility)
     assert ctx.last["method"] == "PUT"
     assert ctx.last["path"] == "/ticket_articles/42"
     assert ctx.last["json"] == {"internal": internal}
+
+
+async def test_set_article_visibility_refuses_an_unknown_word(history_tools) -> None:  # type: ignore[no-untyped-def]
+    """It used to take a bare `internal: bool` while every other article-writing
+    tool took `article_visibility`. Same concept, two vocabularies, and the
+    boolean gave no hint which way round it went."""
+    mcp, ctx = history_tools
+    with pytest.raises(Exception, match="visibility must be one of"):
+        await _call(mcp, "set_article_visibility", article_id=42, visibility="public")
+    assert ctx.calls == []
 
 
 async def test_set_article_visibility_sends_nothing_else(history_tools) -> None:  # type: ignore[no-untyped-def]
@@ -306,7 +319,7 @@ async def test_set_article_visibility_sends_nothing_else(history_tools) -> None:
     preferences.highlight) outside import mode, and still returns 200 - so a
     stray key would be a silent lie about what was changed."""
     mcp, ctx = history_tools
-    await _call(mcp, "set_article_visibility", article_id=42, internal=False)
+    await _call(mcp, "set_article_visibility", article_id=42, visibility="customer_visible")
     assert set(ctx.last["json"]) == {"internal"}
 
 
@@ -315,7 +328,7 @@ async def test_visibility_is_the_only_editable_field(history_tools) -> None:  # 
     props = ((await _tools(mcp))["set_article_visibility"].parameters or {}).get(
         "properties", {}
     )
-    assert set(props) == {"article_id", "internal"}
+    assert set(props) == {"article_id", "visibility"}
 
 
 # ── delete_ticket_article ────────────────────────────────────────────────────

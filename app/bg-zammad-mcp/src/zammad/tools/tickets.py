@@ -83,7 +83,7 @@ def _article(body: str, visibility: str, article_type: str = "note") -> dict[str
     return {"body": body, "type": article_type, "internal": visibility == "internal"}
 
 
-def _reject_name_and_id_conflicts(**pairs: Any) -> None:
+def reject_name_and_id_conflicts(**pairs: Any) -> None:
     """Refuse a call that supplies both the name and the ID form of a field.
 
     Zammad accepts both and silently picks one (the ``_id`` form wins in
@@ -92,7 +92,7 @@ def _reject_name_and_id_conflicts(**pairs: Any) -> None:
     what they asked for was discarded. Better to fail with a sentence that says
     which two arguments disagree.
     """
-    for name in ("state", "priority"):
+    for name in ("state", "priority", "group", "owner", "customer"):
         if pairs.get(name) is not None and pairs.get(f"{name}_id") is not None:
             raise ToolError(
                 f"Pass either {name} or {name}_id, not both — Zammad would "
@@ -470,7 +470,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     ) -> Any:
         # Same merge order as update_ticket: custom attributes first, so an
         # explicit named argument always wins over a same-named custom field.
-        _reject_name_and_id_conflicts(
+        reject_name_and_id_conflicts(
             state=state, state_id=state_id, priority=priority, priority_id=priority_id
         )
         payload: dict[str, Any] = dict(extra_fields or {})
@@ -545,8 +545,17 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             str | None, Field(description="Priority by NAME, e.g. '3 high'")
         ] = None,
         priority_id: Annotated[int | None, Field(ge=1)] = None,
+        owner: Annotated[
+            str | None, Field(description="Owner by login or e-mail, e.g. 'a@b.c'")
+        ] = None,
         owner_id: Annotated[int | None, Field(ge=1)] = None,
+        group: Annotated[
+            str | None, Field(description="Group name, e.g. 'Support'")
+        ] = None,
         group_id: Annotated[int | None, Field(ge=1)] = None,
+        customer: Annotated[
+            str | None, Field(description="Customer by e-mail or login")
+        ] = None,
         customer_id: Annotated[int | None, Field(ge=1)] = None,
         ticket_type: Annotated[
             str | None, Field(description="Free-form ticket type label")
@@ -595,8 +604,17 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         # extra_fields goes in first so a named argument always wins over a
         # same-named custom attribute - an explicit parameter is the stronger
         # statement of intent, and this keeps the merge order predictable.
-        _reject_name_and_id_conflicts(
-            state=state, state_id=state_id, priority=priority, priority_id=priority_id
+        reject_name_and_id_conflicts(
+            state=state,
+            state_id=state_id,
+            priority=priority,
+            priority_id=priority_id,
+            group=group,
+            group_id=group_id,
+            owner=owner,
+            owner_id=owner_id,
+            customer=customer,
+            customer_id=customer_id,
         )
         payload: dict[str, Any] = dict(extra_fields or {})
         if title is not None:
@@ -611,10 +629,16 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             payload["priority"] = priority
         if priority_id is not None:
             payload["priority_id"] = priority_id
+        if owner is not None:
+            payload["owner"] = owner
         if owner_id is not None:
             payload["owner_id"] = owner_id
+        if group is not None:
+            payload["group"] = group
         if group_id is not None:
             payload["group_id"] = group_id
+        if customer is not None:
+            payload["customer"] = customer
         if customer_id is not None:
             payload["customer_id"] = customer_id
         if ticket_type is not None:

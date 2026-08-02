@@ -198,6 +198,17 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 )
             ),
         ] = None,
+        note: Annotated[str | None, Field(max_length=2000)] = None,
+        extra_fields: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description=(
+                    "Custom Object-Manager attributes to set, as a name/value "
+                    "map. Use `list_object_attributes` to discover which exist "
+                    "on this instance."
+                )
+            ),
+        ] = None,
         active: Annotated[bool, Field(description="User is active (can log in)")] = True,
     ) -> Any:
         if not (email or (firstname and lastname) or login):
@@ -205,7 +216,12 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 "create_user requires at least `email`, `login`, or both "
                 "`firstname` and `lastname`"
             )
-        payload: dict[str, Any] = {"active": active}
+        # extra_fields first so a named argument always wins, exactly as in
+        # create_ticket — one merge rule for the whole surface.
+        payload: dict[str, Any] = dict(extra_fields or {})
+        payload["active"] = active
+        if note is not None:
+            payload["note"] = note
         if email is not None:
             payload["email"] = email
         if firstname is not None:
@@ -246,9 +262,22 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             str | None,
             Field(description="Comma-separated role names to set"),
         ] = None,
+        note: Annotated[str | None, Field(max_length=2000)] = None,
+        extra_fields: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description=(
+                    "Custom Object-Manager attributes to set, as a name/value "
+                    "map. Use `list_object_attributes` to discover which exist "
+                    "on this instance."
+                )
+            ),
+        ] = None,
         active: Annotated[bool | None, Field()] = None,
     ) -> Any:
-        payload: dict[str, Any] = {}
+        payload: dict[str, Any] = dict(extra_fields or {})
+        if note is not None:
+            payload["note"] = note
         if email is not None:
             payload["email"] = email
         if firstname is not None:
@@ -266,7 +295,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         if not payload:
             raise ToolError(
                 "update_user needs at least one field to change. Pass e.g. "
-                "email, phone, organization_id or active."
+                "email, phone, organization_id, note or active."
             )
         return await ctx.request("PUT", f"/users/{user_id}", json=payload)
 

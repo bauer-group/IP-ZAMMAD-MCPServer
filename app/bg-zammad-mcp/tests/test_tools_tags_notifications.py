@@ -72,7 +72,7 @@ async def test_search_tags_is_the_agent_safe_route(tag_tools) -> None:  # type: 
 
 async def test_add_tag_uses_query_params_not_a_body(tag_tools) -> None:  # type: ignore[no-untyped-def]
     mcp, ctx = tag_tools
-    result = await _call(mcp, "add_tag", object_id=7, item="urgent")
+    result = await _call(mcp, "add_tag", object_id=7, tag="urgent")
 
     assert ctx.last["method"] == "POST"
     assert ctx.last["path"] == "/tags/add"
@@ -90,7 +90,7 @@ async def test_add_tag_uses_query_params_not_a_body(tag_tools) -> None:  # type:
 
 async def test_remove_tag_uses_delete_with_query_params(tag_tools) -> None:  # type: ignore[no-untyped-def]
     mcp, ctx = tag_tools
-    result = await _call(mcp, "remove_tag", object_id=7, item="urgent")
+    result = await _call(mcp, "remove_tag", object_id=7, tag="urgent")
 
     assert ctx.last["method"] == "DELETE"
     assert ctx.last["path"] == "/tags/remove"

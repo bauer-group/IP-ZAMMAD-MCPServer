@@ -48,6 +48,7 @@ from pydantic import Field
 
 from ..errors import ZammadValidationError
 from . import ToolContext
+from .tickets import reject_name_and_id_conflicts
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -72,7 +73,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             "Apply ONE change set to MANY tickets in a single Zammad "
             "transaction - the bulk action behind an overview's mass-edit bar, "
             "and far cheaper than looping `update_ticket`. List the targets in "
-            "`ticket_ids` and the new values in `attributes`. Zammad converts "
+            "`ticket_ids` and the new values as named arguments - the same "
+            "ones `update_ticket` takes. Zammad converts "
             "association names for you, so both "
             '{"state_id": 4, "owner_id": 12} and {"state": "closed", "owner": '
             '"agent@example.com"} work; custom Object-Manager fields go in the '
@@ -104,14 +106,36 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 description="Numeric IDs of the tickets to change (max 100 per call)",
             ),
         ],
-        attributes: Annotated[
+        state: Annotated[
+            str | None,
+            Field(description="State name, e.g. 'open', 'closed', 'pending reminder'"),
+        ] = None,
+        state_id: Annotated[int | None, Field(ge=1)] = None,
+        pending_time: Annotated[
+            str | None,
+            Field(description="ISO 8601 timestamp; required by pending states"),
+        ] = None,
+        priority: Annotated[
+            str | None, Field(description="Priority name, e.g. '2 normal', '3 high'")
+        ] = None,
+        priority_id: Annotated[int | None, Field(ge=1)] = None,
+        owner: Annotated[
+            str | None, Field(description="Owner by login or e-mail")
+        ] = None,
+        owner_id: Annotated[int | None, Field(ge=1)] = None,
+        group: Annotated[str | None, Field(description="Group name")] = None,
+        group_id: Annotated[int | None, Field(ge=1)] = None,
+        customer: Annotated[
+            str | None, Field(description="Customer by e-mail or login")
+        ] = None,
+        customer_id: Annotated[int | None, Field(ge=1)] = None,
+        extra_fields: Annotated[
             dict[str, Any] | None,
             Field(
                 description=(
-                    "Field values to set on every listed ticket. IDs "
-                    "(state_id, priority_id, owner_id, group_id) and "
-                    "association names (state, priority, owner, group) are "
-                    "both accepted, as are custom Object-Manager field names."
+                    "Custom Object-Manager attributes to set on every listed "
+                    "ticket, as a name/value map. Use `list_ticket_fields` to "
+                    "discover which exist on this instance."
                 )
             ),
         ] = None,
@@ -152,10 +176,41 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 "transaction. Split ticket_ids into chunks of 100 and call the "
                 "tool once per chunk."
             )
+        reject_name_and_id_conflicts(
+            state=state,
+            state_id=state_id,
+            priority=priority,
+            priority_id=priority_id,
+            group=group,
+            group_id=group_id,
+            owner=owner,
+            owner_id=owner_id,
+            customer=customer,
+            customer_id=customer_id,
+        )
+        # Same merge order as update_ticket: a named argument beats a same-named
+        # custom attribute, because an explicit parameter is the stronger
+        # statement of intent.
+        attributes: dict[str, Any] = dict(extra_fields or {})
+        for key, value in (
+            ("state", state),
+            ("state_id", state_id),
+            ("pending_time", pending_time),
+            ("priority", priority),
+            ("priority_id", priority_id),
+            ("owner", owner),
+            ("owner_id", owner_id),
+            ("group", group),
+            ("group_id", group_id),
+            ("customer", customer),
+            ("customer_id", customer_id),
+        ):
+            if value is not None:
+                attributes[key] = value
         if not attributes and article_body is None:
             raise ToolError(
-                "update_tickets needs something to do: pass attributes (e.g. "
-                '{"state": "closed"}), or article_body, or both. Zammad answers '
+                "update_tickets needs something to do: pass a field to change "
+                "(e.g. state='closed'), or article_body, or both. Zammad answers "
                 "an empty change set with HTTP 200, so this call would silently "
                 "have no effect."
             )

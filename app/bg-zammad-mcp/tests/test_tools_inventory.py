@@ -474,3 +474,58 @@ async def test_update_ticket_without_fields_raises_tool_error(mcp_and_ctx) -> No
     mcp, _ = mcp_and_ctx
     with pytest.raises(Exception, match="at least one field"):
         await _call(mcp, "update_ticket", ticket_id=7)
+
+
+# ── vocabulary that must hold ACROSS modules ─────────────────────────────────
+
+
+async def test_visibility_is_never_a_bare_boolean(mcp_and_ctx) -> None:  # type: ignore[no-untyped-def]
+    """`internal: bool` is the shape create_ticket_article was split apart to
+    remove. It survived on set_article_visibility, where the boolean also gave
+    no hint which way round it went."""
+    mcp, _ = mcp_and_ctx
+    for name, tool in (await _tools(mcp)).items():
+        props = (tool.parameters or {}).get("properties", {})
+        assert "internal" not in props, f"{name} still takes a bare `internal` flag"
+        assert "article_internal" not in props, f"{name} still takes `article_internal`"
+
+
+async def test_every_write_tool_can_reach_custom_fields(mcp_and_ctx) -> None:  # type: ignore[no-untyped-def]
+    """Object-Manager attributes exist on User and Organization exactly as they
+    do on Ticket, but only the ticket tools could set them — so a per-instance
+    field was reachable or not depending on which object you were editing."""
+    mcp, _ = mcp_and_ctx
+    tools = await _tools(mcp)
+    for name in (
+        "create_ticket",
+        "update_ticket",
+        "update_tickets",
+        "create_user",
+        "update_user",
+        "create_organization",
+        "update_organization",
+    ):
+        props = (tools[name].parameters or {}).get("properties", {})
+        assert "extra_fields" in props, f"{name} cannot reach custom attributes"
+
+
+async def test_note_is_offered_wherever_zammad_has_one(mcp_and_ctx) -> None:  # type: ignore[no-untyped-def]
+    """Verified against a live 7.1.1: User carries a `note` column just as
+    Organization does. Offering it on one and not the other made the same
+    annotation reachable or not depending on the object."""
+    mcp, _ = mcp_and_ctx
+    tools = await _tools(mcp)
+    for name in ("create_user", "update_user", "create_organization", "update_organization"):
+        props = (tools[name].parameters or {}).get("properties", {})
+        assert "note" in props, f"{name} cannot set a note"
+
+
+async def test_a_tag_is_called_a_tag(mcp_and_ctx) -> None:  # type: ignore[no-untyped-def]
+    """add_tag took `item` — Zammad's wire name — but RETURNED `tag`, so one
+    call spoke both dialects at once."""
+    mcp, _ = mcp_and_ctx
+    tools = await _tools(mcp)
+    for name in ("add_tag", "remove_tag"):
+        props = (tools[name].parameters or {}).get("properties", {})
+        assert "tag" in props, f"{name} does not take `tag`"
+        assert "item" not in props, f"{name} still exposes Zammad's wire name"
