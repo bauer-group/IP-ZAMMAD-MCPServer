@@ -1,3 +1,9 @@
+## [4.0.1](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v4.0.0...v4.0.1) (2026-08-02)
+
+### 🐛 Bug Fixes
+
+* **branding:** replaced the invented logo with the real BAUER GROUP mark ([3ad49d3](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/3ad49d317c6bd68ccabadd57709fcd1f6ba9f3e6))
+
 ## [4.0.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v3.0.0...v4.0.0) (2026-08-02)
 
 ### ⚠ BREAKING CHANGES
