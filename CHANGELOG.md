@@ -1,3 +1,13 @@
+## [3.0.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v2.0.0...v3.0.0) (2026-08-02)
+
+### ⚠ BREAKING CHANGES
+
+* **tools:** unified the collection envelope and pagination
+
+### 🚀 Features
+
+* **tools:** unified the collection envelope and pagination ([6221eda](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/6221eda183b702a2c11984e9214148aa6d88a3d6))
+
 ## [2.0.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v1.0.1...v2.0.0) (2026-08-02)
 
 ### ⚠ BREAKING CHANGES
