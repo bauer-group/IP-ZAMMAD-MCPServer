@@ -37,9 +37,14 @@ def _profile() -> Any:
 
 
 @pytest.fixture
-async def zammad_app(base_zammad_env) -> Any:  # type: ignore[no-untyped-def]
+async def zammad_app(base_zammad_env, tmp_path) -> Any:  # type: ignore[no-untyped-def]
     """The real server, assembled from the profile exactly as main.py does."""
     base_zammad_env.setenv("AUTH_STORAGE_ENCRYPTION_KEY", "A" * 43 + "=")
+    # Without an explicit path the disk-backed OAuth store falls back to the
+    # container default (/app/data/oauth-storage), which is not writable on a
+    # CI runner — the assembly then raises PermissionError before any assertion
+    # runs. Point it at a per-test directory instead.
+    base_zammad_env.setenv("AUTH_DISK_STORAGE_PATH", str(tmp_path / "oauth-storage"))
     return await build_app_from_profile(
         _profile(),
         Settings(),
