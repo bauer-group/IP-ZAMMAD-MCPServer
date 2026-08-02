@@ -1,3 +1,9 @@
+## [1.0.1](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v1.0.0...v1.0.1) (2026-08-02)
+
+### 🐛 Bug Fixes
+
+* **auth:** opened dynamic client registration to any MCP client ([7f39400](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/7f39400e417b2aa9c851ef5bf1cb146b819e1db0))
+
 ## [1.0.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v0.1.10...v1.0.0) (2026-08-02)
 
 ### ⚠ BREAKING CHANGES
