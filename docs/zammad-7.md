@@ -143,10 +143,20 @@ for a plain agent; `search_tags` is the agent-safe path.
 ## How this was verified
 
 Every route was checked against `zammad/zammad@stable` rather than assumed, and
-then exercised against a **real Zammad 7.1.1** running locally: 49 tool calls
-covering reads, the worklist, all four search variants, discovery, and the full
-write path (create, reply, internal note, tag, subscribe, rename, pending state,
-time entry, checklist, bulk update, delete) — all passing.
+then exercised against a **real Zammad 7.1.1** running locally — over the
+complete OAuth path a Claude connector uses, not a shortcut:
+
+1. Dynamic client registration against the MCP server (RFC 7591).
+2. The MCP's own `/authorize`, its consent screen, the redirect out to Zammad,
+   Zammad's consent, and the callback — all over HTTPS through a reverse proxy.
+3. Token exchange, yielding a **FastMCP JWT** (never the upstream Zammad token)
+   with a refresh token and a 2-hour lifetime.
+4. **All 77 tools** called over that authenticated session. 0 failures. The only
+   two refusals are `summarize_ticket` and `draft_kb_answer_from_ticket`, which
+   correctly report that no AI provider is configured on that instance.
+
+The audit log confirms the identity end to end: every write records the real
+OAuth user (`login=agent@example.com`), not a service account.
 
 Two findings on this page come from that live run rather than from the source:
 the HTTPS callback requirement, and the fact that `related_knowledge_base_answers`

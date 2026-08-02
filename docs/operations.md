@@ -83,6 +83,26 @@ upstream reachability, use the `bg.health` tool.
 
 ---
 
+## Behind a reverse proxy
+
+The MCP endpoint is **Streamable HTTP**: the client holds a long-lived `GET /mcp`
+open for server-to-client messages while `POST /mcp` carries the calls. A proxy
+that buffers responses or applies its usual read timeout will break the session
+mid-conversation — the symptom is a `502` partway through a working sequence,
+not at connect time, which makes it look like an application fault.
+
+* **Traefik** (the bundled compose) streams by default and needs no change. Do
+  not add a `buffering` middleware to this router.
+* **Caddy** buffers by default. It needs `flush_interval -1` and a transport
+  with `read_timeout 0` / `write_timeout 0`.
+* **nginx**: `proxy_buffering off;`, `proxy_read_timeout` well above your
+  longest-lived session, and HTTP/1.1 with `proxy_set_header Connection "";`.
+
+`X-Forwarded-Proto` must reach the container, since `PUBLIC_BASE_URL` is what
+the OAuth metadata advertises and it has to say `https`.
+
+---
+
 ## Verifying a deployment
 
 After any deploy, in order of how much they tell you:
