@@ -129,22 +129,35 @@ class Settings(BaseMcpSettings):
         ),
     )
 
-    # ── Inbound DCR guard ─────────────────────────────────────────────────────
-    # MCP clients register dynamically (RFC 7591) and that endpoint is
-    # unauthenticated by design, so without an allowlist any party can register
-    # a client and have the authorization code delivered to a redirect URI they
-    # control. Empty = allow any (FastMCP's default), which is fine locally and
-    # a bad idea on a public deployment.
+    # ── Inbound DCR allowlist (off by default, on purpose) ───────────────────
+    # MCP clients register dynamically (RFC 7591) precisely BECAUSE a server
+    # cannot know its clients in advance — that is the point of the mechanism.
+    # Enumerating vendor callback URLs here therefore works against the
+    # protocol: it locks the server to whichever clients happened to be known
+    # on the day it was configured, and a new agent is refused at registration
+    # with an error nobody can act on from the client side. ChatGPT does not
+    # even use DCR (it prefers Client ID Metadata Documents), so no list could
+    # be complete.
+    #
+    # Default is therefore EMPTY = accept any client, matching FastMCP's own
+    # default and the sibling servers in this fleet. The controls that actually
+    # bound the damage are elsewhere and always on: the consent screen names the
+    # client and its redirect target before anything is issued, MCP_ALLOWED_ROLES
+    # decides who may use the server at all, and every call runs with that user's
+    # own Zammad permissions and is written to the audit log.
+    #
+    # Set it when a deployment knows its client set and wants defence in depth —
+    # the residual risk it removes is a phishing flow where a user is talked
+    # into approving a consent screen for a client the attacker registered.
+    # The MCP spec requires every redirect URI to be loopback or HTTPS, so a
+    # sensible restrictive value looks like:
+    #   https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback,http://localhost:*,http://127.0.0.1:*
     mcp_allowed_client_redirect_uris: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: [
-            "https://claude.ai/api/mcp/auth_callback",
-            "https://claude.com/api/mcp/auth_callback",
-            "http://localhost:*",
-            "http://127.0.0.1:*",
-        ],
+        default_factory=list,
         description=(
             "CSV of redirect-URI patterns dynamically-registered clients may use "
-            "(a trailing * wildcard is honoured by FastMCP). Empty = allow any."
+            "(a trailing * is a wildcard). Empty (default) = accept any client, "
+            "which is what keeps the server usable from any MCP-capable agent."
         ),
     )
 

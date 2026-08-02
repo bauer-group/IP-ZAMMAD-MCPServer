@@ -206,6 +206,46 @@ changes. Operators should:
 
 ---
 
+## Which AI clients can connect
+
+Any of them. The server implements the standard MCP authorization surface —
+RFC 7591 dynamic client registration, RFC 8414 authorization-server metadata,
+RFC 9728 protected-resource metadata, OAuth 2.1 with PKCE (S256) — so a client
+discovers everything it needs from `/.well-known/...` and registers itself. No
+per-client configuration on the server, and nothing Claude-specific.
+
+That is deliberate, and it is why `MCP_ALLOWED_CLIENT_REDIRECT_URIS` ships
+**empty**. Dynamic registration exists precisely because a server cannot know
+its clients in advance; enumerating vendor callback URLs would pin the
+deployment to the agents that were known on the day it was set up, and refuse
+the next one at registration time. Claude, Copilot, Cursor and Continue all use
+different callbacks, and ChatGPT prefers Client ID Metadata Documents over DCR
+entirely — no list could be both complete and current.
+
+With it empty, the controls that bound the damage are the ones that are always
+on:
+
+| Control | What it stops |
+| --- | --- |
+| The consent screen | Names the client and its redirect target before any token is issued. A registration the user did not initiate has to be approved by that user, on screen. |
+| `MCP_ALLOWED_ROLES` | Decides who may use the server at all, regardless of which client they came from. |
+| Per-user Zammad tokens | Every call runs with that person's own permissions. A compromised session is bounded by what that user could do by hand. |
+| The audit log | `audit.write` records the acting user and the object for every write. |
+
+Set the allowlist when your client set is genuinely fixed and you want defence
+in depth against a phishing flow — a user talked into approving a client the
+attacker registered. The MCP spec requires every redirect URI to be loopback or
+HTTPS, so a restrictive value looks like:
+
+```env
+MCP_ALLOWED_CLIENT_REDIRECT_URIS=https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback,http://localhost:*,http://127.0.0.1:*
+```
+
+A trailing `*` is a wildcard. Desktop and IDE clients use loopback callbacks on
+a port they pick at runtime, which is what the `localhost:*` entries cover.
+
+---
+
 ## Frequently-asked questions
 
 **Q: Can I run AUTH_MODE=zammad against a Zammad behind HTTP basic auth?**

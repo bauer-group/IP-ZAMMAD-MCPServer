@@ -154,3 +154,30 @@ def test_allowed_roles_default(base_none_env) -> None:  # type: ignore[no-untype
     # Zammad overrides the base's empty default with its safer Agents+Admins gate.
     settings = Settings()
     assert settings.mcp_allowed_roles == ["Admin", "Agent"]
+
+
+# ── dynamic client registration allowlist ────────────────────────────────────
+
+
+def test_client_redirect_allowlist_is_open_by_default(base_zammad_env) -> None:  # type: ignore[no-untyped-def]
+    """Dynamic registration exists because a server cannot know its clients.
+
+    A default allowlist would pin the deployment to whichever agents were known
+    when it was configured and refuse the next one at registration time —
+    Claude, Copilot, Cursor and Continue all use different callbacks, and
+    ChatGPT does not use DCR at all. Open by default is the interoperable
+    choice; the consent screen, MCP_ALLOWED_ROLES and per-user Zammad tokens are
+    what bound the damage.
+    """
+    assert Settings().mcp_allowed_client_redirect_uris == []
+
+
+def test_client_redirect_allowlist_parses_a_csv(base_zammad_env) -> None:  # type: ignore[no-untyped-def]
+    base_zammad_env.setenv(
+        "MCP_ALLOWED_CLIENT_REDIRECT_URIS",
+        "https://claude.ai/api/mcp/auth_callback, http://localhost:* ,",
+    )
+    assert Settings().mcp_allowed_client_redirect_uris == [
+        "https://claude.ai/api/mcp/auth_callback",
+        "http://localhost:*",
+    ]
