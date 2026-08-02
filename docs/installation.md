@@ -151,7 +151,7 @@ Container liveness is the unauthenticated `/healthz` route (used by the Docker
 `HEALTHCHECK`); the server exposes a single `serve` command (the default):
 
 ```bash
-docker exec -it bg-zammad-mcp curl -fsS http://localhost:8000/healthz
+docker exec -it bg-zammad-mcp curl -fsS http://localhost:8080/healthz
 # {"status": "ok"}
 ```
 

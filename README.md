@@ -48,7 +48,7 @@
                                     │
                                     ▼
         ┌──────────────────────────────────────────────────────────┐
-        │   bg-zammad-mcp container  (FastMCP, port 8000)          │
+        │   bg-zammad-mcp container  (FastMCP, port 8080)          │
         │   ┌────────────────────────────────────────────────────┐ │
         │   │  Inbound: Zammad OAuth | external OIDC | none      │ │
         │   └────────────────────────────────────────────────────┘ │

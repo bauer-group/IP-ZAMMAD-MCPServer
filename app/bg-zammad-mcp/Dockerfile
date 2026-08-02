@@ -119,20 +119,26 @@ COPY --chown=mcp:mcp extensions/ /app/extensions/
 RUN mkdir -p /app/data/oauth-storage \
     && chown -R mcp:mcp /app/data
 
+# MCP_PORT is set here, not left to the library default, because the image has
+# to be coherent on its own: `docker run` with no environment must land the
+# server and the HEALTHCHECK below on the SAME port. Setting only EXPOSE and the
+# healthcheck left the app on the library's 8000 while the check probed 8080,
+# and the container reported unhealthy while serving perfectly well.
 ENV PYTHONPATH=/app/src \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    MCP_PORT=8080
 
 USER mcp
-EXPOSE 8000
+EXPOSE 8080
 
 # /healthz returns 200 OK as soon as the FastMCP lifespan reports ready.
 # Distinct from Zammad's /api/v1/monitoring/health_check (which sits behind
 # Zammad's own auth wall).
 #
-# Shell-form CMD so ${MCP_PORT:-8000} is expanded by /bin/sh at runtime.
+# Shell-form CMD so ${MCP_PORT:-8080} is expanded by /bin/sh at runtime.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD curl -fsS http://localhost:${MCP_PORT:-8000}/healthz || exit 1
+    CMD curl -fsS http://localhost:${MCP_PORT:-8080}/healthz || exit 1
 
 # tini as PID 1 forwards SIGTERM cleanly to the python process so `docker stop`
 # triggers a graceful FastMCP lifespan shutdown instead of a 10s SIGKILL wait.

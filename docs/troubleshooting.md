@@ -111,10 +111,14 @@ discouraged) workaround if you really need a named network.
 
 ## Container exits with "Address already in use"
 
-Another service is bound to `8000` on the host.
+Another service is bound to `8000` on the host — Zammad's own nginx is the
+usual culprit if you run both on one box, though it publishes 8080 rather than
+8000 for exactly this reason.
 
 **Fix:** change `ZAMMAD_MCP_PORT` in `.env` (used only in
-`docker-compose.development.yml`), or stop the conflicting service.
+`docker-compose.development.yml`), or stop the conflicting service. Note that
+`MCP_PORT` is a different knob: it is the port *inside* the container (8080)
+and changing it will not resolve a host-side clash.
 
 ## "Zammad timed out after 3 retries" on every call
 
