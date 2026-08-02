@@ -7,7 +7,8 @@
     "base_url": "${env:ZAMMAD_URL}",
     "api_base_path": "/api/v1",
     "verify_tls": "${env:ZAMMAD_VERIFY_TLS:-true}",
-    "http_timeout": "${env:ZAMMAD_HTTP_TIMEOUT:-30}"
+    "http_timeout": "${env:ZAMMAD_HTTP_TIMEOUT:-30}",
+    "user_agent": "bg-zammad-mcp"
   },
   "auth": {
     "inbound": { "mode": "zammad" },
@@ -19,6 +20,13 @@
       "static_fallback_template": "Token token={token}"
     }
   },
-  "tools": { "source": "python", "register": "server:register" },
+  "tools": [
+    { "source": "python", "register": "server:register" },
+    { "source": "registry", "include": ["bg.ping", "bg.health"] }
+  ],
+  "extensions": {
+    "source": "${env:EXTENSIONS_CONFIG_PATH:-file:///app/extensions/extensions.json}",
+    "required": false
+  },
   "access_control": { "roles_claim": "roles" }
 }

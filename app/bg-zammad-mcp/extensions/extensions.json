@@ -1,0 +1,168 @@
+{
+  "$schema": "https://raw.githubusercontent.com/bauer-group/LIB-BG-MCPCore/main/src/bg_mcpcore/extensions/schema.json",
+
+  "prompts": [
+    {
+      "name": "review_my_queue",
+      "title": "Review my queue",
+      "description": "Walk the agent's own Zammad overviews and produce a prioritised, actionable summary of what needs attention today — what is escalating, what is waiting on the customer, and what has gone quiet.",
+      "tags": ["worklist", "triage"],
+      "arguments": [
+        {
+          "name": "max_tickets",
+          "type": "integer",
+          "description": "How many tickets to look at in detail across all queues.",
+          "default": 15
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "description": "Language for the summary, e.g. 'German' or 'English'.",
+          "default": "German"
+        }
+      ],
+      "template": "Give me a prioritised review of my Zammad work, in ${language}.\n\nSteps:\n\n1. Call `list_my_queues` FIRST. It returns my own overviews with ticket counts and needs no search index, so it is the reliable starting point — do not begin with `search_tickets`.\n2. Pick the queues that actually matter for today's work (open / unassigned / escalating). Skip archives and closed views.\n3. For each of those, call `list_queue_tickets`. Stop once you have about ${max_tickets} tickets in total; say so if you truncated.\n4. For the ones that look urgent or stale, call `get_ticket_full` to see what is really going on. Do NOT call `get_ticket` and `list_ticket_articles` separately — `get_ticket_full` gets both in one request.\n\nThen report, grouped by urgency rather than by queue:\n\n**Needs me now** — escalating, breaching, or blocked on me.\n**Waiting on the customer** — with how long it has been quiet.\n**Can wait** — everything else, one line each.\n\nFor every ticket give: number, title, customer/organization, state, how long since it last moved, and — most usefully — a one-sentence statement of *what it is actually waiting on*. Finish with the three tickets you would start with and why.\n"
+    },
+    {
+      "name": "triage_ticket",
+      "title": "Triage a ticket",
+      "description": "Read a ticket end to end and produce a structured triage: what the customer wants, what has been done, what is blocking it, and a concrete recommended next action.",
+      "tags": ["triage"],
+      "arguments": [
+        {
+          "name": "ticket_id",
+          "type": "integer",
+          "description": "Numeric ID of the ticket to triage.",
+          "required": true
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "description": "Language for the output.",
+          "default": "German"
+        }
+      ],
+      "template": "Triage Zammad ticket ${ticket_id} and report in ${language}.\n\n1. `get_ticket_full` with ticket_id ${ticket_id} — this returns the ticket plus every article in one call.\n2. If the thread is long, re-read the recent end with `list_ticket_articles` using newest_first=True and a limit.\n3. Check `get_ticket_history` if the state or owner changed in a way the articles do not explain.\n4. Look for prior art: `find_related_tickets`, and `search_knowledge_base` for the underlying problem.\n\nReport:\n\n- **Request** — what the customer actually wants, in one sentence, in their words not the subject line.\n- **Done so far** — what we have already tried or promised. Note explicitly whether the customer has SEEN each step: articles marked internal are invisible to them.\n- **Blocked on** — us, the customer, or a third party. Be specific.\n- **Recommended next action** — one concrete step. If a macro or knowledge-base answer covers it, name it (`list_macros`, `search_knowledge_base`).\n- **Classification** — suggested priority and state, with a one-line reason.\n\nDo not change anything. This is a read-only triage.\n"
+    },
+    {
+      "name": "draft_customer_reply",
+      "title": "Draft a customer reply",
+      "description": "Draft a reply to the customer on a ticket, grounded in the ticket thread, the knowledge base and the approved house wording — and show it for approval before anything is sent.",
+      "tags": ["communication"],
+      "arguments": [
+        {
+          "name": "ticket_id",
+          "type": "integer",
+          "description": "Numeric ID of the ticket to reply on.",
+          "required": true
+        },
+        {
+          "name": "intent",
+          "type": "string",
+          "description": "What the reply should achieve, e.g. 'ask for the log file', 'confirm the fix and close'.",
+          "required": true
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "description": "Language to write the reply in.",
+          "default": "German"
+        },
+        {
+          "name": "tone",
+          "type": "string",
+          "description": "Register of the reply, e.g. 'formal (Sie)', 'friendly'.",
+          "default": "professional, formal (Sie)"
+        }
+      ],
+      "template": "Draft a reply to the customer on Zammad ticket ${ticket_id}. Intent: ${intent}. Language: ${language}. Tone: ${tone}.\n\n1. `get_ticket_full` with ticket_id ${ticket_id} — read the whole thread before writing a word. Pay attention to what the customer has actually been told: internal articles are invisible to them, so never refer to something they cannot see.\n2. `search_text_modules` for approved house wording that fits, and `search_knowledge_base` if the answer is documented. Prefer our own wording over inventing your own.\n3. Write the draft. Address what they asked, state clearly what happens next and by when, and ask exactly one question if you need something from them.\n\n**STOP THERE.** Show me the draft and wait for my approval. Do not call `reply_to_customer` until I say so.\n\nWhen I approve, send it with `reply_to_customer` (which is always visible to the customer — that is the whole point of the tool). If I ask you to record something the customer must NOT see, that is `add_internal_note` instead.\n"
+    },
+    {
+      "name": "close_duplicate",
+      "title": "Close a duplicate",
+      "description": "Verify that two tickets really are the same issue, then merge them and leave a clean trail — with a confirmation step, because a merge cannot be undone.",
+      "tags": ["tickets"],
+      "arguments": [
+        {
+          "name": "duplicate_ticket_id",
+          "type": "integer",
+          "description": "Numeric ID of the ticket that should be merged away.",
+          "required": true
+        },
+        {
+          "name": "target_ticket_number",
+          "type": "string",
+          "description": "Ticket NUMBER (not ID) of the ticket that should survive.",
+          "required": true
+        }
+      ],
+      "template": "Ticket ${duplicate_ticket_id} looks like a duplicate of ticket number ${target_ticket_number}.\n\n1. Read BOTH with `get_ticket_full` — ${duplicate_ticket_id} by id, and find the other via `search_tickets` on its number.\n2. Judge honestly whether they are the same issue from the same customer, or merely similar. If you are not confident, say so and stop — a merge cannot be undone.\n3. Show me a short comparison and your verdict, then WAIT for my confirmation.\n\nOn confirmation:\n\n4. `merge_tickets` with source_ticket_id ${duplicate_ticket_id} and the target ticket NUMBER ${target_ticket_number}. Mind the asymmetry: the source is an ID, the target is a number.\n5. Add an internal note on the surviving ticket recording what was merged in and why.\n6. Report what the customer will and will not see as a result.\n"
+    },
+    {
+      "name": "handover_summary",
+      "title": "Shift handover summary",
+      "description": "Produce a handover note for the next shift: what is in flight, what was promised to whom, and what will break if nobody picks it up.",
+      "tags": ["worklist", "report"],
+      "arguments": [
+        {
+          "name": "language",
+          "type": "string",
+          "description": "Language for the handover note.",
+          "default": "German"
+        }
+      ],
+      "template": "Write a shift handover note in ${language}.\n\n1. `list_my_queues`, then `list_queue_tickets` for the active queues.\n2. For anything in flight, use `get_ticket_full` to see what was last said and by whom.\n3. Note explicitly where we have PROMISED the customer something — a callback, a fix, a deadline. Those are what actually hurt if dropped.\n\nStructure the note as:\n\n**Hot** — will escalate or breach in the next shift. Ticket number, customer, deadline, what needs doing.\n**Promised** — what we committed to, to whom, by when.\n**Waiting** — on the customer or a third party, with the date we last chased.\n**Context worth knowing** — anything a colleague would misread without background (an annoyed customer, a workaround in place, a related outage).\n\nKeep it short enough to read in two minutes. Ticket numbers everywhere, so the next person can jump straight in.\n"
+    }
+  ],
+
+  "resources": [
+    {
+      "uri": "zammad://ticket_states",
+      "name": "Ticket states",
+      "description": "Every ticket state defined on this instance, with its ID. Needed to translate a state name into the state_id the write tools accept, and to know which states are 'pending' (those require a pending_time).",
+      "mime_type": "application/json",
+      "tags": ["reference"],
+      "backend": { "method": "GET", "path": "/ticket_states" }
+    },
+    {
+      "uri": "zammad://ticket_priorities",
+      "name": "Ticket priorities",
+      "description": "Every priority defined on this instance, with its ID. Priorities are customisable, so do not assume the default 1 low / 2 normal / 3 high.",
+      "mime_type": "application/json",
+      "tags": ["reference"],
+      "backend": { "method": "GET", "path": "/ticket_priorities" }
+    },
+    {
+      "uri": "zammad://groups",
+      "name": "Groups",
+      "description": "The groups (queues) tickets can belong to. Group membership is what Zammad's per-group permissions are enforced against, so this also explains why a ticket may be invisible.",
+      "mime_type": "application/json",
+      "tags": ["reference"],
+      "backend": { "method": "GET", "path": "/groups" }
+    },
+    {
+      "uri": "zammad://roles",
+      "name": "Roles",
+      "description": "Role definitions and their permission sets. Useful for understanding why an action was refused, and when creating users.",
+      "mime_type": "application/json",
+      "tags": ["reference"],
+      "backend": { "method": "GET", "path": "/roles" }
+    },
+    {
+      "uri": "zammad://macros",
+      "name": "Macros",
+      "description": "The organisation's own pre-approved multi-step workflows, scoped to what the calling agent may use. Prefer applying one of these over hand-rolling the equivalent field updates.",
+      "mime_type": "application/json",
+      "tags": ["reference", "tickets"],
+      "backend": { "method": "GET", "path": "/macros" }
+    },
+    {
+      "uri": "zammad://text_modules",
+      "name": "Text modules",
+      "description": "Approved house wording for customer replies. Reach for these before writing a reply from scratch.",
+      "mime_type": "application/json",
+      "tags": ["reference", "communication"],
+      "backend": { "method": "GET", "path": "/text_modules" }
+    }
+  ]
+}

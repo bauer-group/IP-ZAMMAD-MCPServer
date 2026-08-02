@@ -179,3 +179,61 @@ async def test_tag_vocabulary_stays_closed() -> None:
     server.register(mcp, RecordingCtx())
     used = {tag for t in await mcp.list_tools(run_middleware=False) for tag in t.tags}
     assert used <= allowed, f"unexpected tags: {sorted(used - allowed)}"
+
+
+# ── extensions catalogue ─────────────────────────────────────────────────────
+
+
+def test_shipped_extensions_catalogue_is_valid() -> None:
+    """The catalogue is loaded at boot and the profile marks it optional.
+
+    That combination is exactly how a typo ships unnoticed: a malformed
+    catalogue means the server starts fine and simply has no prompts, with the
+    failure buried in a log line nobody reads. Validate it here instead.
+    """
+    import json
+    from pathlib import Path
+
+    from bg_mcpcore.extensions.config import ExtensionsConfig
+
+    path = Path(__file__).resolve().parent.parent / "extensions" / "extensions.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.pop("$schema", None)
+    catalogue = ExtensionsConfig.model_validate(data)
+
+    assert catalogue.prompts, "the catalogue ships no prompts"
+    assert catalogue.resources, "the catalogue ships no resources"
+
+
+async def test_prompt_templates_only_reference_real_tools() -> None:
+    """A prompt naming a tool that does not exist sends the model hunting.
+
+    Prompts are where the house's way of working is written down, so they name
+    tools constantly — and unlike tool descriptions nothing else checks them.
+    """
+    import json
+    import re
+    from pathlib import Path
+
+    import server
+
+    mcp: FastMCP = FastMCP("prompt-check")
+    server.register(mcp, RecordingCtx())
+    real = {t.name for t in await mcp.list_tools(run_middleware=False)}
+
+    path = Path(__file__).resolve().parent.parent / "extensions" / "extensions.json"
+    catalogue = json.loads(path.read_text(encoding="utf-8"))
+
+    unknown: list[str] = []
+    for prompt in catalogue.get("prompts", []):
+        for token in re.findall(r"`([a-z][a-z0-9_]{3,})`", prompt.get("template", "")):
+            # Prompt arguments are interpolated as ${name}; a bare backticked
+            # word is either a tool or a parameter we mention on purpose.
+            if token in real:
+                continue
+            if token in {a["name"] for a in prompt.get("arguments", [])}:
+                continue
+            if token in {"newest_first", "pending_time", "state_id", "ticket_id"}:
+                continue
+            unknown.append(f"{prompt['name']}: `{token}`")
+    assert not unknown, "prompts reference unknown tools: " + ", ".join(unknown)

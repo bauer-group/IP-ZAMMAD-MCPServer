@@ -97,6 +97,13 @@ RUN rm /tmp/_test_passed
 WORKDIR /app
 COPY --chown=mcp:mcp src/ ./src/
 
+# Operator-editable extensions catalogue: the config-driven prompts (agent
+# workflows encoded once, rather than rediscovered per session) and read-only
+# resources. Shipped as a default; mount over it or point
+# EXTENSIONS_CONFIG_PATH elsewhere to customise without rebuilding. The profile
+# marks it optional, so a deployment that removes it still starts.
+COPY --chown=mcp:mcp extensions/ /app/extensions/
+
 # OAuth state directory for the disk-storage fallback (when AUTH_REDIS_URL is
 # unset). Created and chowned at build time so the mcp user can write to it
 # even before a volume is mounted. Compose stacks mount this path as a named
