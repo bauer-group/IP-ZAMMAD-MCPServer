@@ -23,6 +23,12 @@ DOCKERFILE = Path(__file__).resolve().parents[1] / "Dockerfile"
 
 @pytest.fixture(scope="module")
 def dockerfile() -> str:
+    if not DOCKERFILE.is_file():
+        # The image's own test stage copies src/, tests/ and extensions/ but not
+        # the Dockerfile, so these checks cannot run from inside the build they
+        # are checking. They still gate every push: the Tests workflow and any
+        # local run execute against a full checkout, where the file is present.
+        pytest.skip("Dockerfile not present (running inside the image build)")
     return DOCKERFILE.read_text(encoding="utf-8")
 
 
