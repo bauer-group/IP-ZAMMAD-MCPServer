@@ -1,3 +1,13 @@
+## [4.0.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v3.0.0...v4.0.0) (2026-08-02)
+
+### ⚠ BREAKING CHANGES
+
+* **tools:** closed the last vocabulary splits and two field gaps
+
+### 🚀 Features
+
+* **tools:** closed the last vocabulary splits and two field gaps ([ac6ea35](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/ac6ea3535e4615356c607feb5bd0ce8e76d0e47b))
+
 ## [3.0.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v2.0.0...v3.0.0) (2026-08-02)
 
 ### ⚠ BREAKING CHANGES
