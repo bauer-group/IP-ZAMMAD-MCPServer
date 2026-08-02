@@ -209,20 +209,24 @@ authorize redirect that the AI client follows. The browser would see the
 basic-auth prompt and fail.
 
 **Q: My Zammad is at a sub-path (`https://intranet.example.com/zammad`).**
-A: Set `ZAMMAD_URL=https://intranet.example.com/zammad` and adjust
-`ZAMMAD_OAUTH_AUTHORIZE_PATH=/oauth/authorize`,
-`ZAMMAD_OAUTH_TOKEN_PATH=/oauth/token`,
-`ZAMMAD_USERINFO_PATH=/api/v1/users/me` to keep them sub-path-relative.
-The MCP server concatenates them onto `ZAMMAD_URL`.
+A: Set `ZAMMAD_URL=https://intranet.example.com/zammad` and leave the three
+path settings at their defaults. They are concatenated onto `ZAMMAD_URL`, so the
+sub-path is already accounted for — prepending it again would produce
+`/zammad/zammad/oauth/authorize`.
 
 **Q: When do Zammad role changes take effect for an active session?**
-A: The role set is captured from `/users/me` at login and attached to the
-FastMCP-issued JWT, so it is fixed for that session. A user picks up changed
-roles on the next authentication; revoking the upstream token in Zammad ends
-access at the next token refresh.
+A: Almost immediately — roles are *not* baked into the session. The
+FastMCP-issued JWT carries no role information; the allowlist reads them off an
+access token that is re-materialised from `/users/me` on each request. A
+demoted or deactivated user is therefore blocked on their next tool call, not
+at their next login. The only delay is `MCP_ROLE_CACHE_TTL_SECONDS` (default 30),
+which caches a successful verification; set it to 0 to remove even that.
 
 **Q: Can I use both AUTH_MODE=zammad and a fallback ZAMMAD_API_TOKEN?**
-A: Yes. If the upstream-token lookup fails (storage corruption, expired
-token, etc.) and `ZAMMAD_API_TOKEN` is set, the call falls back to the
-static token. A warning is logged. This is defensive — set the token in
-zammad-mode only when you have a clear use-case for it.
+A: No — the server refuses to start with both set. The fallback is not
+defensive, it is a silent privilege escalation: when the per-user token cannot
+be resolved, every call would run as the token's owner (typically an admin)
+rather than as the calling user, logging only
+`auth.obo_missing_per_user_token_falling_back_to_static` at WARNING. That
+defeats the entire reason for choosing this mode. If you accept that trade-off
+deliberately, set `MCP_ALLOW_STATIC_FALLBACK=true`.

@@ -1,14 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/bauer-group/automation-templates/main/.github/config/docker-base-image-monitor/docker-base-images.schema.json",
-  "_description": "Zammad MCP stack — upstream images consumed via docker-compose + Dockerfile. The monitor tracks digests and triggers a release when an upstream image moves.",
+  "_description": "Images BUILT INTO the bg-zammad-mcp container. Every entry here force-dispatches a release when its digest moves (see check-base-images.yml), so only images whose contents actually ship inside our artifact belong in this file. redis:8-alpine used to be listed and is not: it is a docker-compose sidecar that appears nowhere in the Dockerfile, so its digest moving produced content-free version bumps — three of the releases up to 0.1.8. Compose images are already watched by Dependabot's docker-compose ecosystem, which opens a PR instead of cutting a release.",
   "images": [
-    {
-      "name": "redis",
-      "image": "redis",
-      "tag": "8-alpine",
-      "variable": "REDIS_ALPINE_DIGEST",
-      "description": "Redis cache for OAuth client registrations (DCR + upstream token store)"
-    },
     {
       "name": "python-alpine",
       "image": "python",

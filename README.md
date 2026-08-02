@@ -56,7 +56,7 @@
         │   │  Role allowlist middleware (Admin/Agent/Customer)  │ │
         │   └────────────────────────────────────────────────────┘ │
         │   ┌────────────────────────────────────────────────────┐ │
-        │   │  36 hand-curated MCP tools                         │ │
+        │   │  hand-curated MCP tools (docs/tools.md)            │ │
         │   │   list_tickets, search_tickets, create_ticket,     │ │
         │   │   get_me, list_users, list_groups, …               │ │
         │   └────────────────────────────────────────────────────┘ │
@@ -119,7 +119,7 @@ See [docs/client-setup.md](docs/client-setup.md). Short version:
 | Client | URL |
 | --- | --- |
 | Claude Web | Settings → Connectors → Add custom → `https://your-host/mcp` |
-| Claude Desktop | Add to `mcp.json`: `{"command": "npx", "args": ["mcp-remote", "https://your-host/mcp"]}` |
+| Claude Desktop | Add to `claude_desktop_config.json`: `{"command": "npx", "args": ["mcp-remote", "https://your-host/mcp"]}` |
 | Microsoft 365 Copilot Studio | Custom connector → MCP → `https://your-host/mcp` |
 | Cursor / Continue | Add to `mcp.json` with the same URL |
 
@@ -207,7 +207,7 @@ IP-ZAMMAD-MCPServer/
 │       │   │   └── zammad_oauth.py  ← Zammad as OAuth2 IdP (auth_providers entry point)
 │       │   ├── zammad/
 │       │   │   ├── errors.py        ← typed exception hierarchy
-│       │   │   └── tools/           ← hand-written tool surface (36 tools)
+│       │   │   └── tools/           ← hand-written tool surface (docs/tools.md)
 │       │   │       ├── tickets.py · articles.py · users.py · organizations.py
 │       │   │       └── groups.py · tags.py · reference.py · notifications.py
 │       │   └── static/
@@ -257,6 +257,9 @@ IP-ZAMMAD-MCPServer/
 
 ## Documentation
 
+- [docs/tools.md](docs/tools.md) — **the tool reference** (generated from the live registration)
+- [docs/cookbook.md](docs/cookbook.md) — worked recipes, and the sharp edges each one hits
+- [docs/zammad-7.md](docs/zammad-7.md) — Zammad 7 coverage matrix, what is deliberately unwired, and the Doorkeeper facts
 - [docs/installation.md](docs/installation.md) — step-by-step deploy for each flavour
 - [docs/authentication.md](docs/authentication.md) — Zammad OAuth2 setup + external OIDC walkthroughs
 - [docs/role-based-access.md](docs/role-based-access.md) — `MCP_ALLOWED_ROLES` model
@@ -264,6 +267,7 @@ IP-ZAMMAD-MCPServer/
 - [docs/testing.md](docs/testing.md) — local & remote testing with MCP Inspector
 - [docs/troubleshooting.md](docs/troubleshooting.md) — common errors & fixes
 - [docs/ZAMMAD-MCP-SPEC.md](docs/ZAMMAD-MCP-SPEC.md) — design specification (source of truth)
+- [SECURITY.md](SECURITY.md) — trust model, disclosure contact, documented trade-offs
 
 ---
 

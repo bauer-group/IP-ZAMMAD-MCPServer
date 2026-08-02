@@ -12,6 +12,15 @@ on:
         type: boolean
         default: false
 
+# This workflow commits digest variables and dispatches a release, unattended,
+# on a daily cron with secrets: inherit — and had no permissions block at all,
+# so it ran on whatever the repository default happened to be. Declared
+# explicitly and narrowly: without `contents: write` it cannot commit the
+# digests, and without `actions: write` it cannot dispatch docker-release.yml.
+permissions:
+  contents: write
+  actions: write
+
 jobs:
   check-updates:
     name: Check for Base Image Updates

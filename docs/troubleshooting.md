@@ -79,17 +79,23 @@ turn audit-only back off.
 Symptom: a tool call fails with `MissingUpstreamToken` even though the
 user is logged in.
 
-**Cause:** the OAuth state store was wiped (container restart on disk
-storage without a mounted volume, or `redis-cli FLUSHDB` followed by a
-restart). The MCP-issued JWT still validates but the Zammad token it
-referenced is gone.
+**Cause:** no per-user Zammad token could be resolved for this request AND no
+static fallback is configured — the outbound resolver's fail-closed path. In
+`AUTH_MODE=zammad` that is the intended posture: the server refuses to call
+Zammad as somebody other than the caller.
 
-**Fix #1 (immediate):** the AI client must re-authenticate. Most clients
-do this automatically on the next failed call.
+Note that a wiped OAuth state store does NOT surface here. That produces a
+plain **401** and a forced re-authentication, because the token lookup fails
+before any tool runs — see the 401 section above.
 
-**Fix #2 (prevent recurrence):** mount the OAuth state path as a Docker
-volume (the bundled compose files already do this). For Redis,
-ensure persistence is on (`--appendonly yes`, present by default).
+**Fix:** the AI client must re-authenticate. If this recurs for every user
+rather than one, the claim carrying the upstream token has stopped arriving —
+check for `auth.obo_missing_per_user_token_falling_back_to_static` (WARNING) and
+verify the deployment is on a matching bg-mcpcore version.
+
+**Not a fix:** setting `ZAMMAD_API_TOKEN` in zammad mode. It would make the
+error go away by running every call as that token's owner instead of as the
+user, which is why the server now refuses to boot with both set.
 
 ## 504 Gateway Timeout from Traefik (Coolify)
 

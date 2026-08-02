@@ -91,3 +91,10 @@ jobs:
           env -i HOME="$HOME" PATH="$PATH" \
             PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
             pytest -q --cov=src --cov-report=term-missing
+
+      # The tool reference is derived from the live registration rather than
+      # maintained by hand — a 75-tool inventory written by hand is wrong within
+      # a release, which is how the docs ended up quoting four different counts.
+      - name: 📚 Tool reference is up to date
+        working-directory: .
+        run: python scripts/generate-tools-doc.py --check

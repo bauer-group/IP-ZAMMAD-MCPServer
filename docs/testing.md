@@ -61,7 +61,7 @@ npx @modelcontextprotocol/inspector
 2. **URL:** `https://your-mcp.example.com/mcp`.
 3. The Inspector handles DCR registration + the OAuth flow.
 
-In the Inspector you can browse the live tool catalogue (36 tools — `list_tickets`,
+In the Inspector you can browse the live tool catalogue (see [tools.md](tools.md) — `list_tickets`,
 `search_tickets`, `get_me`, …), run a tool against real Zammad data with the
 authenticated user's permissions, and inspect the AccessToken claims FastMCP
 attached (including the upstream Zammad token in `claims.upstream_access_token`).

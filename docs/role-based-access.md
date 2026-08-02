@@ -53,20 +53,28 @@ Zammad admin's Roles list.
 1. The user logs in via OAuth (Mode 1) and Zammad issues an access token.
 2. The MCP server calls `${ZAMMAD_URL}/api/v1/users/me` with that token
    to validate it. The response includes the user's role names.
-3. The role names are attached to the FastMCP-issued JWT's claims.
+3. The role names land on the server-side access token for that request.
+   They are **not** written into the FastMCP-issued JWT — the client never
+   receives them and cannot influence them.
 4. On every JSON-RPC request, bg-mcpcore's `access_control` gate (activated by
-   the profile's `access_control` block) reads the claims and compares the
-   user's roles against `MCP_ALLOWED_ROLES`.
+   the profile's `access_control` block) reads those roles and compares them
+   against `MCP_ALLOWED_ROLES`.
 5. Match → request passes through. No match → request is rejected with
    `PermissionError`.
 
+Note that step 2 depends on `expand=true`: without it Zammad returns numeric
+`role_ids` and no role names, the claim is absent, and the gate's
+"claim absent → defer to the upstream" rule makes it a no-op.
+
 ### When role changes take effect
 
-The role set is captured from `/users/me` at login (step 2) and attached to the
-FastMCP-issued JWT, so it is fixed for the lifetime of that session. A user whose
-Zammad roles change picks up the new set on the next authentication. Revoking the
-upstream token in Zammad (User Profile → Token Access → Revoke) ends MCP access
-at the next token refresh — the refresh fails and the client must re-authenticate.
+On the caller's **next tool call**, not at their next login. The roles are read
+from a `/users/me` response that is re-fetched per request rather than captured
+once at login, so a demoted or deactivated user loses access almost immediately.
+The only delay is `MCP_ROLE_CACHE_TTL_SECONDS` (default 30), which caches a
+successful verification; failures are never cached, so a revoked token is
+rejected on the spot. Revoking the upstream token in Zammad (User Profile →
+Token Access → Revoke) therefore ends MCP access within that window.
 
 ## Audit-only mode
 
@@ -96,11 +104,14 @@ exists only as a coarse filter, never the sole defence.
 
 ## Sample log entries
 
-Successful match (debug-level, not shown at INFO):
+The allowlist announces itself once at boot (INFO):
 
 ```text
-2026-05-27T10:32:11Z [debug   ] auth.token_verified sub=user-42 roles=['Admin', 'Agent']
+2026-05-27T10:32:11Z [info    ] auth.role_allowlist_active allowed_roles=['admin', 'agent'] roles_claim=roles audit_only=False
 ```
+
+A successful match is deliberately not logged — it is the overwhelming majority
+of traffic, and logging it would bury the denials.
 
 Denial (warn-level, INFO and above):
 

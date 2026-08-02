@@ -24,7 +24,7 @@ src/
                          backend / OAuth2 fields + per-mode validation
   server.py              The one Zammad seam: register() wraps bg-mcpcore's
                          ctx.request_json with Zammad's typed-error factory and
-                         registers the eight hand-written tool modules
+                         registers the hand-written tool modules
   auth/
     zammad_oauth.py      Zammad as OAuth2 provider
                          (entry point: bg_mcpcore.auth_providers = zammad)
@@ -32,14 +32,25 @@ src/
     errors.py            Typed exception hierarchy (raised by the shim on non-2xx)
     tools/
       __init__.py        ToolContext Protocol the tool modules call against
-      tickets.py         list/search/get/create/update/delete tickets
-      articles.py        list/get/create ticket articles (messages, notes)
+      overviews.py       the agent's own work queues (index-free)
+      tickets.py         list/search/get/create/update/delete + condition search
+      articles.py        read articles; reply_to_customer / add_internal_note
+      macros.py          list and apply the organisation's own workflows
+      bulk.py            mass_update across many tickets
+      links.py           merge, related, customer tickets, links
+      checklists.py      ticket checklists and templates
+      time_accounting.py time entries on a ticket
+      attachments.py     list and download article attachments
+      history.py         ticket history, article corrections, unsubscribe
+      knowledge.py       knowledge-base search/answers, text modules
+      ai.py              Zammad 7 summarize / KB suggestions (feature-gated)
+      fields.py          discover custom Object-Manager attributes
       users.py           list/search/get/create/update users + get_me
       organizations.py   list/search/get/create/update organizations
       groups.py          list/get groups
-      tags.py            add/remove/list tags on objects
+      tags.py            list/search/add/remove tags on objects
       reference.py       ticket states / priorities / roles / version
-      notifications.py   list and mark online notifications
+      notifications.py   notifications, subscribers, subscribe
   static/
     index.html           Landing page served at /
     logo.svg             Consent-screen brand asset served at /logo.svg

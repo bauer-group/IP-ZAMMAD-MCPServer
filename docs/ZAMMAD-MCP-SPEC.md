@@ -56,7 +56,7 @@
         │   │   MCP_ALLOWED_ROLES enforcement                    │ │
         │   └────────────────────────────────────────────────────┘ │
         │   ┌────────────────────────────────────────────────────┐ │
-        │   │  ~33 hand-curated MCP tools                        │ │
+        │   │  hand-curated MCP tools (see docs/tools.md)        │ │
         │   │   tickets, articles, users, organizations,         │ │
         │   │   groups, tags, reference, notifications           │ │
         │   └────────────────────────────────────────────────────┘ │
@@ -122,7 +122,7 @@ specific MCP instance.
 | `tags.py` | 5 | list (per-object / all) / search / add / remove |
 | `reference.py` | 4 | states / priorities / roles / version |
 | `notifications.py` | 5 | online notifications + ticket subscribe/unsubscribe |
-| **Total** | **~36** | — |
+| **Total** | see [tools.md](tools.md) (generated) | — |
 
 The full live catalogue is at [tools.md](./tools.md). The tool surface is the
 hand-written `python` source registered via the profile (`server:register`).
@@ -182,8 +182,11 @@ proxy we don't control and could be spoofed by the client.
 - **Upstream Zammad tokens** are stored in the same backend, encrypted
   at rest with the same key (Fernet in Redis mode, HKDF-derived Fernet
   in disk mode). The token itself never leaves the server.
-- **Cache of /users/me responses** lives in process memory only; it's
-  cheap to rebuild on container restart.
+- **Cache of /users/me verifications** lives in process memory only, keyed on
+  a SHA-256 of the token and bounded to 2048 entries. Only SUCCESSFUL
+  verifications are cached, for `MCP_ROLE_CACHE_TTL_SECONDS` (default 30), so a
+  revoked token or a demoted user is rejected on the spot rather than for the
+  rest of the window. It is cheap to rebuild on container restart.
 
 ## Failure modes
 
@@ -192,6 +195,6 @@ proxy we don't control and could be spoofed by the client.
 | Zammad unreachable at startup | The container starts regardless — nothing probes Zammad at boot. OAuth endpoints serve, but token verification (`/api/v1/users/me`) fails, so every request 401s until Zammad returns. |
 | Zammad unreachable mid-session | Tool call raises `ZammadTransportError` after 3 retries. AI client sees a JSON-RPC error. Session state is not invalidated. |
 | `/users/me` 401 | Token verification fails. MCP rejects the inbound request with 401. AI client retries the OAuth flow. |
-| Redis unreachable (Redis mode) | OAuth state lookups fail. New auth flows error out; existing sessions can continue until next refresh. Container logs `auth.storage_lookup_failed`. |
+| Redis unreachable (Redis mode) | OAuth state lookups fail. New auth flows error out; existing sessions can continue until next refresh. Container logs `auth.obo_storage_lookup_failed (DEBUG, so invisible at the default LOG_LEVEL=INFO)`. |
 | Disk-store path not writable (disk mode) | Container refuses to start. |
 | Role allowlist miss | Request rejected with `RoleNotAllowedError`. Logged as `auth.role_denied`. |

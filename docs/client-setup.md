@@ -26,8 +26,13 @@ the next call.
 
 ## Claude Desktop
 
-Edit `~/.config/Claude/claude_desktop_config.json` (macOS / Linux) or
-`%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+Edit the Claude Desktop config file:
+
+| OS | Path |
+| --- | --- |
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Linux | `~/.config/Claude/claude_desktop_config.json` |
 
 ```json
 {
@@ -125,7 +130,8 @@ and redeploy — no code changes needed.
 
 ## Verifying the connection
 
-Once connected, the AI client should expose ~36 tools whose names start
+Once connected, the AI client should expose the full tool catalogue (see
+[tools.md](tools.md) for the generated list) — names start
 with verbs like `list_`, `search_`, `get_`, `create_`, `update_`,
 `delete_`. Quick smoke test in any client:
 
