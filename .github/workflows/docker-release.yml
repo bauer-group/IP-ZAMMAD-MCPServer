@@ -100,7 +100,16 @@ jobs:
 
       push: true
 
-      security-scan: true
+      # Disabled again after v1.0.0. Enabling it does NOT block a bad image —
+      # the scan runs AFTER the push (the v1.0.0 image reached GHCR at 14:38:22,
+      # the job failed at 14:38:38) — and its SARIF upload step in
+      # automation-templates exits 128, a git error, on every run. The result was
+      # a permanently red release job that reports nothing, which is worse than
+      # no scan: it trains everyone to ignore the pipeline.
+      #
+      # security-fail-on and the security-events permission are kept so this is a
+      # one-line re-enable once the template's upload step is fixed upstream.
+      security-scan: false
       security-fail-on: 'CRITICAL'
       generate-sbom: true
       sync-dockerhub-readme: true
