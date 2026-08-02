@@ -1,3 +1,13 @@
+## [5.0.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v4.0.1...v5.0.0) (2026-08-02)
+
+### ⚠ BREAKING CHANGES
+
+* moved the container port to 8080, host stays 8000
+
+### 🔨 Build
+
+* moved the container port to 8080, host stays 8000 ([fb38e6e](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/fb38e6e5fb1672eb3ecac14318074c6822bcd519))
+
 ## [4.0.1](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v4.0.0...v4.0.1) (2026-08-02)
 
 ### 🐛 Bug Fixes
