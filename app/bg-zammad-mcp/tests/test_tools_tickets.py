@@ -15,7 +15,7 @@ import pytest
 from fastmcp import FastMCP
 
 from tests.test_tools_inventory import RecordingCtx
-from zammad.tools import articles, tickets
+from zammad.tools import articles, bulk, tickets
 
 
 @pytest.fixture
@@ -24,6 +24,21 @@ def ticket_tools() -> tuple[FastMCP, RecordingCtx]:
     ctx = RecordingCtx()
     tickets.register(mcp, ctx)
     articles.register(mcp, ctx)
+    return mcp, ctx
+
+
+@pytest.fixture
+def write_tools() -> tuple[FastMCP, RecordingCtx]:
+    """Every tool that can create a ticket article, in one server.
+
+    The visibility vocabulary is only worth anything if it is the SAME across
+    them, so the check has to span modules rather than stay inside one.
+    """
+    mcp: FastMCP = FastMCP("write-tools-test")
+    ctx = RecordingCtx()
+    tickets.register(mcp, ctx)
+    articles.register(mcp, ctx)
+    bulk.register(mcp, ctx)
     return mcp, ctx
 
 
@@ -198,3 +213,90 @@ async def test_get_article_plain_hits_the_plain_route(ticket_tools) -> None:  # 
     await _call(mcp, "get_article_plain", article_id=12)
     assert ctx.last["method"] == "GET"
     assert ctx.last["path"] == "/ticket_article_plain/12"
+
+
+# ── one vocabulary for article visibility ────────────────────────────────────
+
+
+async def test_every_article_writing_tool_speaks_the_same_visibility(write_tools) -> None:  # type: ignore[no-untyped-def]
+    """`internal` used to be a bare boolean whose default differed per tool —
+    False on create_ticket, True in bulk, and hardcoded True on update_ticket
+    with no parameter at all. That is the trap articles.py was split in two to
+    close, reintroduced through a side door."""
+    mcp, _ = write_tools
+    tools = {t.name: t for t in await mcp.list_tools(run_middleware=False)}
+    for name in ("create_ticket", "update_ticket", "update_tickets"):
+        props = (tools[name].parameters or {}).get("properties", {})
+        assert "article_visibility" in props, f"{name} does not use the shared vocabulary"
+        assert "article_internal" not in props, f"{name} still exposes the old boolean"
+
+
+@pytest.mark.parametrize(
+    ("visibility", "expected_internal"),
+    [("customer_visible", False), ("internal", True)],
+)
+async def test_visibility_maps_to_zammads_internal_flag(  # type: ignore[no-untyped-def]
+    ticket_tools, visibility: str, expected_internal: bool
+) -> None:
+    mcp, ctx = ticket_tools
+    await _call(mcp, "update_ticket", ticket_id=7, article_body="x", article_visibility=visibility)
+    assert ctx.last["json"]["article"]["internal"] is expected_internal
+
+
+async def test_an_unknown_visibility_is_refused(ticket_tools) -> None:  # type: ignore[no-untyped-def]
+    mcp, ctx = ticket_tools
+    with pytest.raises(Exception, match="article_visibility must be one of"):
+        await _call(mcp, "update_ticket", ticket_id=7, article_body="x", article_visibility="secret")
+    assert ctx.calls == []
+
+
+# ── one rule for identifiers: name OR id, never silently both ────────────────
+
+
+@pytest.mark.parametrize("field", ["state", "priority"])
+async def test_name_and_id_together_are_refused(ticket_tools, field: str) -> None:  # type: ignore[no-untyped-def]
+    """Zammad accepts both and silently applies one, so the caller gets a
+    success for a change that was half discarded."""
+    mcp, ctx = ticket_tools
+    with pytest.raises(Exception, match="not both"):
+        await _call(mcp, "update_ticket", ticket_id=7, **{field: "x", f"{field}_id": 3})
+    assert ctx.calls == []
+
+
+async def test_create_ticket_accepts_associations_by_id_too(ticket_tools) -> None:  # type: ignore[no-untyped-def]
+    """create_ticket used to take group/customer by name ONLY while update_ticket
+    took them by id only — the same five associations, split the opposite way."""
+    mcp, ctx = ticket_tools
+    await _call(
+        mcp,
+        "create_ticket",
+        title="t",
+        group="ignored",
+        customer="ignored@example.com",
+        article_body="b",
+        group_id=3,
+        customer_id=9,
+    )
+    payload = ctx.last["json"]
+    assert payload["group_id"] == 3
+    assert payload["customer_id"] == 9
+    # Only the chosen form travels, so Zammad never has to break a tie.
+    assert "group" not in payload
+    assert "customer" not in payload
+
+
+# ── tags: replacing is not adding ────────────────────────────────────────────
+
+
+async def test_replace_tags_is_named_after_what_it_does(ticket_tools) -> None:  # type: ignore[no-untyped-def]
+    """`tags` sounded additive and wiped the list. `add_tag` exists for adding;
+    the destructive one now says so in its name."""
+    mcp, _ = ticket_tools
+    tools = {t.name: t for t in await mcp.list_tools(run_middleware=False)}
+    update = (tools["update_ticket"].parameters or {}).get("properties", {})
+    assert "replace_tags" in update
+    assert "tags" not in update
+    # The alternative is named where the choice is actually made — in the
+    # parameter's own description, not buried in the tool blurb.
+    assert "add_tag" in update["replace_tags"]["description"]
+    assert "REPLACES" in update["replace_tags"]["description"]

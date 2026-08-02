@@ -144,13 +144,13 @@ def _articles(count: int, body: str = "hello") -> list[dict[str, object]]:
 
 
 def test_article_bodies_are_capped_and_flagged() -> None:
-    out = trim_articles(_articles(1, body="y" * 500), max_body_chars=100)
+    out = trim_articles(_articles(1, body="y" * 500), max_body_chars=100)["articles"]
     assert out[0]["body_truncated"] is True
     assert len(str(out[0]["body"])) < 200
 
 
 def test_short_bodies_are_not_flagged() -> None:
-    out = trim_articles(_articles(1, body="short"), max_body_chars=100)
+    out = trim_articles(_articles(1, body="short"), max_body_chars=100)["articles"]
     assert "body_truncated" not in out[0]
     assert out[0]["body"] == "short"
 
@@ -158,7 +158,7 @@ def test_short_bodies_are_not_flagged() -> None:
 def test_html_bodies_are_flattened() -> None:
     articles = _articles(1, body="<p>Hi <b>there</b></p>")
     articles[0]["content_type"] = "text/html"
-    out = trim_articles(articles, max_body_chars=1000)
+    out = trim_articles(articles, max_body_chars=1000)["articles"]
     assert "<" not in str(out[0]["body"])
 
 
@@ -174,10 +174,24 @@ def test_dropping_articles_is_never_silent() -> None:
     assert "40" in out["note"]
 
 
-def test_no_wrapper_when_nothing_was_dropped() -> None:
-    out = trim_articles(_articles(3), max_body_chars=500, limit=10)
-    assert isinstance(out, list)
-    assert len(out) == 3
+def test_the_shape_never_depends_on_how_many_articles_there_are() -> None:
+    """A bare array for short threads and an object for long ones would make the
+    response type depend on data the caller cannot see."""
+    short = trim_articles(_articles(3), max_body_chars=500, limit=10)
+    long = trim_articles(_articles(40), max_body_chars=500, limit=5)
+    assert set(short) >= {"articles", "total_count", "returned", "order"}
+    assert set(long) >= {"articles", "total_count", "returned", "order"}
+    assert "note" not in short, "nothing was dropped, so there is nothing to note"
+    assert "note" in long
+
+
+def test_ordering_is_always_stated_even_when_nothing_was_dropped() -> None:
+    """The regression this file exists for: newest_first reversed the list but
+    only said so when it ALSO truncated, so the recommended call on a short
+    thread returned a reversed list with no signal at all."""
+    out = trim_articles(_articles(3), max_body_chars=500, limit=10, newest_first=True)
+    assert out["order"] == "newest first"
+    assert [a["id"] for a in out["articles"]] == [2, 1, 0]
 
 
 def test_newest_first_reverses_and_says_so() -> None:
@@ -187,7 +201,7 @@ def test_newest_first_reverses_and_says_so() -> None:
 
 
 def test_article_noise_is_dropped(  ) -> None:
-    out = trim_articles(_articles(1), max_body_chars=500)
+    out = trim_articles(_articles(1), max_body_chars=500)["articles"]
     assert "preferences" not in out[0]
     assert "origin_by_id" not in out[0]
     # ...but everything needed to judge who said what to whom survives.

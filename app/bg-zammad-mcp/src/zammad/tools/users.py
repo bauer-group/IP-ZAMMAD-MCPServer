@@ -73,7 +73,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             Field(
                 description=(
                     "Comma-separated whitelist of fields to keep, e.g. "
-                    "'id,number,title,state'. Overrides the default projection."
+                    "'id,login,firstname,lastname,email'. Overrides the default projection."
                 )
             ),
         ] = None,
@@ -120,7 +120,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             Field(
                 description=(
                     "Comma-separated whitelist of fields to keep, e.g. "
-                    "'id,number,title,state'. Overrides the default projection."
+                    "'id,login,firstname,lastname,email'. Overrides the default projection."
                 )
             ),
         ] = None,

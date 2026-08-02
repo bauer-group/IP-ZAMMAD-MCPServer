@@ -174,7 +174,7 @@ async def test_internal_email_is_unreachable(mcp_and_ctx) -> None:  # type: igno
             ticket_ids=[1, 2],
             article_body="x",
             article_type="email",
-            article_internal=True,
+            article_visibility="internal",
         )
 
 
@@ -186,7 +186,7 @@ async def test_a_visible_bulk_reply_is_allowed(mcp_and_ctx) -> None:  # type: ig
         ticket_ids=[1],
         article_body="We are on it.",
         article_type="email",
-        article_internal=False,
+        article_visibility="customer_visible",
     )
     assert ctx.last["json"]["article"] == {
         "body": "We are on it.",

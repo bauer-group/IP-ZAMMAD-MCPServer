@@ -128,12 +128,12 @@ async def test_add_ticket_time_entry_with_article_and_type(mcp_and_ctx) -> None:
         "add_ticket_time_entry",
         ticket_id=50,
         time_unit=7.5,
-        ticket_article_id=88,
+        article_id=88,
         type_id=4,
     )
     assert ctx.last["json"] == {
         "time_unit": 7.5,
-        "ticket_article_id": 88,
+        "article_id": 88,
         "type_id": 4,
     }
 

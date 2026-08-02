@@ -73,15 +73,28 @@ MODULES = {
 
 
 class RecordingCtx:
-    """A ToolContext that records calls instead of performing them."""
+    """A ToolContext that records calls instead of performing them.
 
-    def __init__(self, response: Any = None) -> None:
+    ``RecordingCtx(value)`` answers every call with that value. Some tools make
+    more than one request — resolving a ticket number from an id, reading a
+    checklist back — and giving them the same answer twice tests nothing, so
+    ``RecordingCtx(responses=[a, b])`` answers each call in turn.
+
+    The queue is a SEPARATE keyword on purpose: a list is a perfectly ordinary
+    response body (most list_* tools return one), so overloading the positional
+    argument would silently turn a returned array into a per-call queue.
+    """
+
+    def __init__(self, response: Any = None, *, responses: list[Any] | None = None) -> None:
         self.settings = None
         self.calls: list[dict[str, Any]] = []
-        self._response = response if response is not None else {}
+        self._queue = list(responses) if responses is not None else None
+        self._response = {} if response is None else response
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
         self.calls.append({"method": method, "path": path, **kwargs})
+        if self._queue is not None:
+            return self._queue.pop(0) if self._queue else {}
         return self._response
 
     @property

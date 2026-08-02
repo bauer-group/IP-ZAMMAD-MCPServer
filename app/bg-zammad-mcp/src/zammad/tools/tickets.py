@@ -52,6 +52,45 @@ if TYPE_CHECKING:
 SEARCH_MAX_LIMIT = 200
 INDEX_MAX_PER_PAGE = 100
 
+# One vocabulary for article visibility across every tool that can create an
+# article. It used to be a bare `internal` boolean whose default differed per
+# tool — False when creating a ticket, True in bulk update, and hardcoded True
+# with no parameter at all on update_ticket. That is the same trap the article
+# tools were split in two to close, reintroduced through a side door: a model
+# writing "resolved, we replaced the toner" as part of closing a ticket had no
+# way to know the customer would never see it. An enum with no default forces
+# the choice to be stated wherever it is available at all.
+VISIBILITY = ("customer_visible", "internal")
+
+
+def _article(body: str, visibility: str, article_type: str = "note") -> dict[str, Any]:
+    """Build a ticket-article payload from the shared visibility vocabulary."""
+    if visibility not in VISIBILITY:
+        raise ToolError(
+            f"article_visibility must be one of {', '.join(VISIBILITY)} "
+            f"(got {visibility!r}). 'customer_visible' is what the customer reads; "
+            "'internal' is agents-only."
+        )
+    return {"body": body, "type": article_type, "internal": visibility == "internal"}
+
+
+def _reject_name_and_id_conflicts(**pairs: Any) -> None:
+    """Refuse a call that supplies both the name and the ID form of a field.
+
+    Zammad accepts both and silently picks one (the ``_id`` form wins in
+    ``CanAssociations``), so a caller that sets ``state='open'`` and
+    ``state_id=4`` gets a result with no error and no indication that half of
+    what they asked for was discarded. Better to fail with a sentence that says
+    which two arguments disagree.
+    """
+    for name in ("state", "priority"):
+        if pairs.get(name) is not None and pairs.get(f"{name}_id") is not None:
+            raise ToolError(
+                f"Pass either {name} or {name}_id, not both — Zammad would "
+                f"silently apply one and drop the other. Use {name} for a name "
+                f"like 'open', {name}_id for a numeric ID."
+            )
+
 
 def register(mcp: FastMCP, ctx: ToolContext) -> int:
     @mcp.tool(
@@ -303,10 +342,12 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             "Create a new Zammad ticket. Requires `title`, `group` (group name "
             "or ID), `customer` (customer e-mail or user ID), and an initial "
             "`article_body`. The opening article is customer-visible by "
-            "default, matching how a ticket raised by a customer looks - set "
-            "`article_internal=true` for a ticket you are raising purely for "
-            "internal tracking. Other useful fields: `priority_id`, "
-            "`state_id`, `owner_id`, `ticket_type`, `tags`."
+            "default, matching how a ticket raised by a customer looks - pass "
+            "`article_visibility='internal'` for a ticket you are raising "
+            "purely for internal tracking. Every association accepts either a "
+            "name or an ID: `group`/`group_id`, `customer`/`customer_id`, "
+            "`state`/`state_id`, `priority`/`priority_id`. Pass one form or "
+            "the other, never both."
         ),
         annotations=ToolAnnotations(
             readOnlyHint=False,
@@ -318,11 +359,23 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     async def create_ticket(
         title: Annotated[str, Field(min_length=1, max_length=255)],
         group: Annotated[
-            str, Field(description="Group name (preferred) or numeric ID as string")
+            str,
+            Field(
+                description=(
+                    "Group NAME, e.g. 'Support'. Zammad resolves this by name only "
+                    "- a numeric ID here is looked up as a name and fails. Use "
+                    "`group_id` if you have the ID."
+                )
+            ),
         ],
         customer: Annotated[
             str,
-            Field(description="Customer e-mail address (preferred) or numeric user ID"),
+            Field(
+                description=(
+                    "Customer E-MAIL address. Resolved by e-mail (or login) only; "
+                    "use `customer_id` if you have the numeric user ID."
+                )
+            ),
         ],
         article_body: Annotated[
             str, Field(min_length=1, description="Initial article body (plain text or HTML)")
@@ -336,18 +389,40 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 )
             ),
         ] = "note",
-        article_internal: Annotated[
-            bool,
+        article_visibility: Annotated[
+            str,
             Field(
                 description=(
-                    "Hide the opening article from the customer. Defaults to "
-                    "false (customer-visible)."
+                    "Who may read the opening article: 'customer_visible' "
+                    "(default - matches a ticket the customer raised themselves) "
+                    "or 'internal' for a ticket you are tracking internally."
                 )
             ),
-        ] = False,
+        ] = "customer_visible",
+        group_id: Annotated[
+            int | None, Field(ge=1, description="Group by ID, instead of `group`")
+        ] = None,
+        customer_id: Annotated[
+            int | None, Field(ge=1, description="Customer by ID, instead of `customer`")
+        ] = None,
+        state: Annotated[
+            str | None, Field(description="State by NAME, e.g. 'open'")
+        ] = None,
+        priority: Annotated[
+            str | None, Field(description="Priority by NAME, e.g. '3 high'")
+        ] = None,
         priority_id: Annotated[int | None, Field(ge=1)] = None,
         state_id: Annotated[int | None, Field(ge=1)] = None,
         owner_id: Annotated[int | None, Field(ge=1)] = None,
+        pending_time: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "ISO 8601 timestamp, required by Zammad when the ticket is "
+                    "created directly into a 'pending ...' state."
+                )
+            ),
+        ] = None,
         ticket_type: Annotated[
             str | None,
             Field(
@@ -361,15 +436,6 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             str | None,
             Field(description="Comma-separated tag list, e.g. 'urgent,external'"),
         ] = None,
-        pending_time: Annotated[
-            str | None,
-            Field(
-                description=(
-                    "ISO 8601 timestamp, required by Zammad when the ticket is "
-                    "created directly into a 'pending ...' state."
-                )
-            ),
-        ] = None,
         extra_fields: Annotated[
             dict[str, Any] | None,
             Field(
@@ -382,29 +448,37 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     ) -> Any:
         # Same merge order as update_ticket: custom attributes first, so an
         # explicit named argument always wins over a same-named custom field.
+        _reject_name_and_id_conflicts(
+            state=state, state_id=state_id, priority=priority, priority_id=priority_id
+        )
         payload: dict[str, Any] = dict(extra_fields or {})
         payload |= {
             "title": title,
-            "group": group,
-            "customer": customer,
-            "article": {
-                "body": article_body,
-                "type": article_type,
-                "internal": article_internal,
-            },
+            "article": _article(article_body, article_visibility, article_type),
         }
-        if priority_id is not None:
-            payload["priority_id"] = priority_id
-        if state_id is not None:
-            payload["state_id"] = state_id
-        if owner_id is not None:
-            payload["owner_id"] = owner_id
-        if ticket_type is not None:
-            payload["type"] = ticket_type
-        if tags is not None:
-            payload["tags"] = tags
-        if pending_time is not None:
-            payload["pending_time"] = pending_time
+        # Zammad resolves `group`/`customer` by name and `*_id` by id, and the
+        # _id form wins when both are present (CanAssociations). Send only what
+        # the caller actually chose so that precedence never has to be guessed.
+        if group_id is not None:
+            payload["group_id"] = group_id
+        else:
+            payload["group"] = group
+        if customer_id is not None:
+            payload["customer_id"] = customer_id
+        else:
+            payload["customer"] = customer
+        for key, value in (
+            ("state", state),
+            ("state_id", state_id),
+            ("priority", priority),
+            ("priority_id", priority_id),
+            ("owner_id", owner_id),
+            ("type", ticket_type),
+            ("tags", tags),
+            ("pending_time", pending_time),
+        ):
+            if value is not None:
+                payload[key] = value
         return await ctx.request("POST", "/tickets", json=payload)
 
     @mcp.tool(
@@ -455,21 +529,36 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ticket_type: Annotated[
             str | None, Field(description="Free-form ticket type label")
         ] = None,
-        tags: Annotated[
+        replace_tags: Annotated[
             str | None,
-            Field(description="Comma-separated tags to SET on the ticket"),
+            Field(
+                description=(
+                    "REPLACES the ticket's entire tag list with this comma-separated "
+                    "set, discarding any tag not listed. To add or remove a single "
+                    "tag without touching the others, use `add_tag` / `remove_tag`."
+                )
+            ),
         ] = None,
         article_body: Annotated[
             str | None,
             Field(
                 description=(
-                    "Optional note to add in the SAME request as the field changes, "
-                    "so 'close this with a note' is one atomic update. Internal by "
-                    "default - to write something the customer sees, use "
-                    "`reply_to_customer` instead."
+                    "Optional article to add in the SAME request as the field "
+                    "changes, so 'close this with a note' is one atomic update. "
+                    "Its audience is set by `article_visibility`."
                 )
             ),
         ] = None,
+        article_visibility: Annotated[
+            str,
+            Field(
+                description=(
+                    "Who may read `article_body`: 'internal' (default, agents only) "
+                    "or 'customer_visible'. For a real reply prefer "
+                    "`reply_to_customer`, which also sends it."
+                )
+            ),
+        ] = "internal",
         extra_fields: Annotated[
             dict[str, Any] | None,
             Field(
@@ -484,6 +573,9 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         # extra_fields goes in first so a named argument always wins over a
         # same-named custom attribute - an explicit parameter is the stronger
         # statement of intent, and this keeps the merge order predictable.
+        _reject_name_and_id_conflicts(
+            state=state, state_id=state_id, priority=priority, priority_id=priority_id
+        )
         payload: dict[str, Any] = dict(extra_fields or {})
         if title is not None:
             payload["title"] = title
@@ -505,10 +597,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             payload["customer_id"] = customer_id
         if ticket_type is not None:
             payload["type"] = ticket_type
-        if tags is not None:
-            payload["tags"] = tags
+        if replace_tags is not None:
+            payload["tags"] = replace_tags
         if article_body is not None:
-            payload["article"] = {"body": article_body, "type": "note", "internal": True}
+            payload["article"] = _article(article_body, article_visibility)
         if not payload:
             raise ToolError(
                 "update_ticket needs at least one field to change. Pass e.g. "

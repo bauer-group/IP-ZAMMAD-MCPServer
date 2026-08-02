@@ -2,7 +2,7 @@
 Ticket relationship tools - merges, links, and same-customer context.
 
 Endpoints (all under /api/v1/):
-  PUT    /ticket_merge/{source_ticket_id}/{target_ticket_number}  merge two tickets
+  PUT    /ticket_merge/{id}/{number}       merge two tickets (number resolved here)
   GET    /ticket_related/{ticket_id}                              same-customer + recent
   GET    /ticket_customer?customer_id={id}                        one customer's tickets
   GET    /links?link_object=Ticket&link_object_value={id}         links on a ticket
@@ -27,7 +27,7 @@ differently:
 
 Zammad resolves each with a plain find_by, so the wrong identifier does not
 raise - it simply matches nothing. Every parameter below is therefore named
-after the identifier it carries (`source_ticket_id` vs `source_ticket_number`),
+after the identifier it carries, and every one of them is a ticket ID,
 because the name is the only thing standing between the model and a silent
 no-op.
 
@@ -91,6 +91,33 @@ def _validate_link_type(link_type: str) -> None:
         )
 
 
+async def _ticket_number(ctx: ToolContext, ticket_id: int, role: str) -> str:
+    """Look up a ticket's NUMBER from its ID.
+
+    Two Zammad endpoints in this module address a ticket by number rather than
+    id: ``PUT /ticket_merge/:source_ticket_id/:target_number`` takes a
+    number for the target, and ``POST /links/add`` looks the SOURCE up with
+    ``Ticket.find_by(number:)``. The asymmetry is Zammad's, and it is not even
+    consistent between the two — merge wants the number on one side, link on
+    the other.
+
+    Exposing that to a model means it has to remember which of two neighbouring
+    tools wants which kind of identifier, and it will not: a caller with a
+    ticket ID in hand has no way to tell from the call site that this one place
+    is different. So the tools take an ID everywhere and this resolves the
+    number, at the cost of one extra GET on two comparatively rare operations.
+    """
+    ticket = await ctx.request("GET", f"/tickets/{ticket_id}")
+    number = ticket.get("number") if isinstance(ticket, dict) else None
+    if not number:
+        raise ToolError(
+            f"Could not read the ticket number for the {role} ticket "
+            f"(ticket_id={ticket_id}). Check the ID with get_ticket; Zammad needs "
+            "the number for this operation and the tool resolves it for you."
+        )
+    return str(number)
+
+
 def register(mcp: FastMCP, ctx: ToolContext) -> int:
     read_only = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True)
 
@@ -100,7 +127,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             "Merge one ticket into another: every article moves to the target "
             "ticket and the source is emptied and closed as 'merged'. MIND THE "
             "TWO DIFFERENT IDENTIFIERS - `source_ticket_id` is the numeric ID "
-            "of the ticket that DISAPPEARS, `target_ticket_number` is the "
+            "of the ticket that DISAPPEARS, `target_ticket_id` is the "
             "human ticket NUMBER (the digit string quoted in mail subjects, "
             "e.g. '67001') of the ticket that survives. Swapping them makes "
             "Zammad merge the wrong way round or match nothing at all. "
@@ -119,35 +146,24 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             int,
             Field(ge=1, description="Numeric ID of the ticket to merge AWAY (it is emptied)"),
         ],
-        target_ticket_number: Annotated[
-            str,
-            Field(
-                min_length=1,
-                description="Ticket NUMBER (not ID) of the ticket that keeps the articles",
-            ),
+        target_ticket_id: Annotated[
+            int,
+            Field(ge=1, description="Numeric ID of the ticket that keeps the articles"),
         ],
     ) -> Any:
-        number = target_ticket_number.strip()
-        # '#' would truncate the URL at a fragment, and 'Ticket#67001' is the
-        # shape an LLM copies out of a subject line - both mean the caller has
-        # a display label rather than the number itself.
-        if "#" in number or any(char.isspace() for char in number):
-            raise ToolError(
-                f"target_ticket_number must be the bare ticket number, e.g. '67001' - "
-                f"got {target_ticket_number!r}. Strip any ticket hook prefix and "
-                "whitespace; if you only have the ticket's ID, look up its number with "
-                "get_ticket first."
-            )
+        # Zammad's route takes the target as a NUMBER; resolve it here so both
+        # arguments are the same kind of thing at the call site.
+        number = await _ticket_number(ctx, target_ticket_id, "target")
         result = await ctx.request("PUT", f"/ticket_merge/{source_ticket_id}/{number}")
         # A lookup miss is reported as HTTP 200 with result='failed', so an
         # unchecked call would report a merge that never happened.
         if isinstance(result, dict) and result.get("result") == "failed":
             raise ToolError(
                 f"Zammad refused the merge: {result.get('message') or 'no reason given'} "
-                f"(reported as HTTP 200 with result='failed'). Verify that "
-                f"source_ticket_id={source_ticket_id} is a ticket ID and that "
-                f"target_ticket_number={number!r} is a ticket NUMBER - the two are not "
-                "interchangeable."
+                f"(reported as HTTP 200 with result='failed'). Both tickets must exist "
+                f"and you need update access to each: source_ticket_id="
+                f"{source_ticket_id}, target_ticket_id={target_ticket_id} "
+                f"(number {number})."
             )
         return result
 
@@ -217,7 +233,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         description=(
             "Link two tickets to each other. THE TWO TICKETS ARE IDENTIFIED "
             "DIFFERENTLY and the values are not interchangeable: "
-            "`source_ticket_number` is a ticket NUMBER (the digit string from "
+            "`source_ticket_id` identifies the ticket whose role is named by "
             "the mail subject) while `target_ticket_id` is a numeric ID. "
             "`link_type` says what the SOURCE is TO the target - 'parent' "
             "makes the source ticket the parent of the target, 'child' the "
@@ -235,8 +251,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ),
     )
     async def link_tickets(
-        source_ticket_number: Annotated[
-            str, Field(min_length=1, description="Ticket NUMBER of the source ticket")
+        source_ticket_id: Annotated[
+            int, Field(ge=1, description="Numeric ID of the source ticket")
         ],
         target_ticket_id: Annotated[
             int, Field(ge=1, description="Numeric ID of the target ticket")
@@ -247,13 +263,16 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ] = "normal",
     ) -> Any:
         _validate_link_type(link_type)
+        # Zammad looks the SOURCE up by number here (links_controller does
+        # Ticket.find_by(number:)) - the opposite side from merge_tickets.
+        source_number = await _ticket_number(ctx, source_ticket_id, "source")
         result = await ctx.request(
             "POST",
             "/links/add",
             json={
                 "link_type": link_type,
                 "link_object_source": LINK_OBJECT,
-                "link_object_source_number": source_ticket_number,
+                "link_object_source_number": source_number,
                 "link_object_target": LINK_OBJECT,
                 "link_object_target_value": target_ticket_id,
             },
@@ -264,8 +283,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         if isinstance(result, dict) and result.get("id") is None:
             raise ToolError(
                 f"Zammad answered 201 but stored no link (the returned record has a null "
-                f"id), which it only does when the link already exists. Ticket "
-                f"{source_ticket_number} and ticket {target_ticket_id} are already linked "
+                f"id), which it only does when the link already exists. Tickets "
+                f"{source_ticket_id} and {target_ticket_id} are already linked "
                 f"as {link_type!r} - call list_ticket_links to confirm."
             )
         return result
@@ -273,9 +292,9 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     @mcp.tool(
         name="unlink_tickets",
         description=(
-            "Remove a link between two tickets. BOTH tickets are identified by "
-            "numeric ID here - `source_ticket_id` is an ID, unlike the number "
-            "`link_tickets` takes. `link_type` must match the link being "
+            "Remove a link between two tickets. Both are identified by numeric ID, "
+            "like every other ticket argument on this server. `link_type` must "
+            "match the link being "
             "removed; Zammad matches on the type as well, so the wrong one "
             "deletes nothing. Removing a link that does not exist is not an "
             "error, Zammad answers 201 either way. The returned removed count "
@@ -320,7 +339,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         # orientation the caller passed is therefore deleted and reported as 0.
         removed = len(result) if isinstance(result, list) else 0
         return {
-            "removed": removed,
+            # Named removed_COUNT because `removed` is a plain boolean on
+            # remove_tag; one key must not be a bool in one tool and an
+            # undercounting integer in another.
+            "removed_count": removed,
             "source_ticket_id": source_ticket_id,
             "target_ticket_id": target_ticket_id,
             "link_type": link_type,

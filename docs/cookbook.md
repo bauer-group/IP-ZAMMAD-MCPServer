@@ -130,13 +130,19 @@ point.
 ## 7. Merge a duplicate
 
 ```text
-merge_tickets(source_ticket_id=4711, target_ticket_number="10042")
+merge_tickets(source_ticket_id=4711, target_ticket_id=4700)
 ```
 
-Two traps, both handled but worth knowing: the **source is an ID and the target
-is a ticket number**, and a *failed* merge returns HTTP 200 with a failure in
-the body. The tool parses that and raises, so a merge that did not happen is
-never reported as success. It is not reversible — read both tickets first.
+**Every ticket argument on this server is a numeric `*_ticket_id`** — there is
+no tool that wants a ticket number instead. Zammad's own API is not consistent
+here (its merge route takes a number for the target, and `links/add` takes one
+for the source, on the opposite side), but that asymmetry is resolved inside the
+tools rather than published to you.
+
+One trap remains, and it is handled: a *failed* merge returns HTTP 200 with the
+failure in the body. The tool parses that and raises, so a merge that did not
+happen is never reported as success. It is not reversible — read both tickets
+first.
 
 ---
 

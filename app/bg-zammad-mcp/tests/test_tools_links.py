@@ -37,9 +37,15 @@ TOOL_NAMES = {
 DESTRUCTIVE = {"merge_tickets", "unlink_tickets"}
 
 
-def _build(response: Any = None) -> tuple[FastMCP, RecordingCtx]:
+# Every number-resolving tool answers its first request with this.
+TICKET_11 = {"id": 11, "number": "67001"}
+
+
+def _build(
+    response: Any = None, *, responses: list[Any] | None = None
+) -> tuple[FastMCP, RecordingCtx]:
     mcp: FastMCP = FastMCP("test-links")
-    ctx = RecordingCtx(response)
+    ctx = RecordingCtx(response, responses=responses)
     links.register(mcp, ctx)
     return mcp, ctx
 
@@ -133,32 +139,39 @@ async def test_list_ticket_links_scopes_the_query_to_tickets() -> None:
 
 async def test_merge_puts_the_source_id_and_target_number_in_that_order() -> None:
     """The whole point of the parameter names: /ticket_merge/{id}/{number}."""
-    mcp, ctx = _build({"result": "success", "target_ticket": {}, "source_ticket": {}})
-    await _call(mcp, "merge_tickets", source_ticket_id=12, target_ticket_number="67001")
+    mcp, ctx = _build(responses=[TICKET_11, {"result": "success", "target_ticket": {}, "source_ticket": {}}])
+    await _call(mcp, "merge_tickets", source_ticket_id=12, target_ticket_id=11)
     assert ctx.last["method"] == "PUT"
     assert ctx.last["path"] == "/ticket_merge/12/67001"
 
 
 async def test_merge_raises_on_zammads_http_200_failure() -> None:
     """A lookup miss is reported as success; unchecked, the model would too."""
-    mcp, _ = _build({"result": "failed", "message": "The target ticket number could not be found."})
-    with pytest.raises(Exception, match="target ticket number could not be found"):
-        await _call(mcp, "merge_tickets", source_ticket_id=12, target_ticket_number="67001")
+    mcp, _ = _build(responses=[TICKET_11, {"result": "failed", "message": "not found"}])
+    with pytest.raises(Exception, match="Zammad refused the merge"):
+        await _call(mcp, "merge_tickets", source_ticket_id=12, target_ticket_id=11)
 
 
-async def test_merge_rejects_a_ticket_hook_prefix_instead_of_a_number() -> None:
-    """'Ticket#67001' is what an LLM copies out of a subject line, and a '#'
-    would silently truncate the URL at a fragment."""
-    mcp, ctx = _build()
-    with pytest.raises(Exception, match="bare ticket number"):
-        await _call(mcp, "merge_tickets", source_ticket_id=12, target_ticket_number="Ticket#67001")
-    assert ctx.calls == []
+async def test_merge_resolves_the_target_number_from_its_id() -> None:
+    """Zammad's route wants the target as a NUMBER while the source is an ID.
+
+    That asymmetry used to be published as two differently-typed arguments; a
+    model had to remember which neighbouring tool wanted which. Now both are
+    IDs and the tool does the lookup, so the trap is unreachable rather than
+    documented.
+    """
+    mcp, ctx = _build(responses=[TICKET_11, {"result": "success"}])
+    await _call(mcp, "merge_tickets", source_ticket_id=10, target_ticket_id=11)
+
+    lookup, merge = ctx.calls
+    assert (lookup["method"], lookup["path"]) == ("GET", "/tickets/11")
+    assert merge["path"] == "/ticket_merge/10/67001"
 
 
 async def test_merge_returns_the_body_unchanged_on_success() -> None:
     body = {"result": "success", "target_ticket": {"id": 3}, "source_ticket": {"id": 12}}
-    mcp, _ = _build(body)
-    result = await _call(mcp, "merge_tickets", source_ticket_id=12, target_ticket_number="67001")
+    mcp, _ = _build(responses=[TICKET_11, body])
+    result = await _call(mcp, "merge_tickets", source_ticket_id=12, target_ticket_id=11)
     assert result.structured_content == body
 
 
@@ -166,9 +179,9 @@ async def test_merge_returns_the_body_unchanged_on_success() -> None:
 
 
 async def test_link_sends_the_source_as_a_number_and_the_target_as_an_id() -> None:
-    mcp, ctx = _build({"id": 55})
+    mcp, ctx = _build(responses=[TICKET_11, {"id": 55}])
     await _call(
-        mcp, "link_tickets", source_ticket_number="67001", target_ticket_id=12, link_type="parent"
+        mcp, "link_tickets", source_ticket_id=11, target_ticket_id=12, link_type="parent"
     )
     assert ctx.last["method"] == "POST"
     assert ctx.last["path"] == "/links/add"
@@ -184,20 +197,22 @@ async def test_link_sends_the_source_as_a_number_and_the_target_as_an_id() -> No
 
 
 async def test_link_defaults_to_a_normal_link() -> None:
-    mcp, ctx = _build({"id": 55})
-    await _call(mcp, "link_tickets", source_ticket_number="67001", target_ticket_id=12)
+    mcp, ctx = _build(responses=[TICKET_11, {"id": 55}])
+    await _call(mcp, "link_tickets", source_ticket_id=11, target_ticket_id=12)
     assert ctx.last["json"]["link_type"] == "normal"
 
 
 async def test_link_raises_when_zammad_returns_201_with_a_null_id() -> None:
     """Link.create hands back an unsaved record when the link already exists,
     and the controller renders it as 201 - the null id is the only tell."""
-    mcp, _ = _build({"id": None, "link_type_id": 1})
+    mcp, _ = _build(responses=[TICKET_11, {"id": None, "link_type_id": 1}])
     with pytest.raises(Exception, match="already linked"):
-        await _call(mcp, "link_tickets", source_ticket_number="67001", target_ticket_id=12)
+        await _call(mcp, "link_tickets", source_ticket_id=11, target_ticket_id=12)
 
 
 async def test_unlink_identifies_both_tickets_by_id() -> None:
+    # One request only (unlink resolves no number), and Zammad answers with the
+    # LIST of deleted rows - which is what removed_count counts.
     mcp, ctx = _build([{"id": 55}])
     result = await _call(
         mcp, "unlink_tickets", source_ticket_id=9, target_ticket_id=12, link_type="child"
@@ -207,18 +222,19 @@ async def test_unlink_identifies_both_tickets_by_id() -> None:
     assert ctx.last["json"] == {
         "link_type": "child",
         "link_object_source": "Ticket",
-        # VALUE, not number - the asymmetry with link_tickets.
+        # Zammad wants a VALUE here and a number on links/add; both tools take
+        # an ID at the call site and the difference stays in this module.
         "link_object_source_value": 9,
         "link_object_target": "Ticket",
         "link_object_target_value": 12,
     }
-    assert result.structured_content["removed"] == 1
+    assert result.structured_content["removed_count"] == 1
 
 
 async def test_unlink_reports_zero_when_zammad_deleted_nothing() -> None:
     mcp, _ = _build([])
     result = await _call(mcp, "unlink_tickets", source_ticket_id=9, target_ticket_id=12)
-    assert result.structured_content["removed"] == 0
+    assert result.structured_content["removed_count"] == 0
     assert result.structured_content["link_type"] == "normal"
 
 
@@ -227,7 +243,7 @@ async def test_an_unknown_link_type_is_rejected_before_zammad_invents_it(tool_na
     """Link.link_type_get CREATES an unknown type, permanently, without error."""
     mcp, ctx = _build()
     kwargs: dict[str, Any] = (
-        {"source_ticket_number": "67001", "target_ticket_id": 12}
+        {"source_ticket_id": 11, "target_ticket_id": 12}
         if tool_name == "link_tickets"
         else {"source_ticket_id": 9, "target_ticket_id": 12}
     )

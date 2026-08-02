@@ -207,18 +207,28 @@ def trim_articles(
                 trimmed["body_truncated"] = True
         out.append(trimmed)
 
+    # The wrapper is UNCONDITIONAL. Two reasons, both learned the hard way:
+    #
+    # * `order` used to be emitted only when something was dropped, so the
+    #   recommended call — newest_first=True with a limit the thread does not
+    #   exceed — returned a reversed bare list with no ordering signal at all.
+    #   A model reads articles[0] as the opening message when it is the latest,
+    #   and reports that confidently. Silent, and wrong in the worst place.
+    # * Flipping between a bare array and an object based on how many articles
+    #   a ticket happens to have makes the response shape depend on data the
+    #   caller cannot see. Four extra keys are cheaper than a broken chain.
+    result: dict[str, Any] = {
+        "articles": out,
+        "total_count": total,
+        "returned": len(out),
+        "order": "newest first" if newest_first else "oldest first",
+    }
     if truncated_list:
-        return {
-            "articles": out,
-            "total_count": total,
-            "returned": len(out),
-            "order": "newest first" if newest_first else "oldest first",
-            "note": (
-                f"Only {len(out)} of {total} articles are included. Raise limit, "
-                "flip newest_first, or read specific articles with get_ticket_article."
-            ),
-        }
-    return out
+        result["note"] = (
+            f"Only {len(out)} of {total} articles are included. Raise limit, "
+            "flip newest_first, or read specific articles with get_ticket_article."
+        )
+    return result
 
 
 __all__ = [

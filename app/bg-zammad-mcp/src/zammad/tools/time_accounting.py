@@ -84,7 +84,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             "unit this Zammad is configured for (minutes by default, possibly "
             "hours or days) - do not convert, pass what the user said and name "
             "the unit back to them. Optionally attach the booking to one "
-            "article with `ticket_article_id` (the reply the work went into) "
+            "article with `article_id` (the reply the work went into) "
             "and categorise it with `type_id` if the instance uses activity "
             "types; those ids come from an admin-only endpoint, so leave "
             "`type_id` out unless you were given one. Needs `ticket.agent` "
@@ -92,7 +92,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             "Entries add up rather than replace, and an agent token cannot "
             "correct or delete one afterwards - that is an administrator's "
             "job, so get the number right. An article can carry at most one "
-            "booking: a second one for the same `ticket_article_id` is "
+            "booking: a second one for the same `article_id` is "
             "rejected with HTTP 422."
         ),
         annotations=ToolAnnotations(
@@ -114,7 +114,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 ),
             ),
         ],
-        ticket_article_id: Annotated[
+        article_id: Annotated[
             int | None,
             Field(
                 ge=1,
@@ -130,8 +130,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ] = None,
     ) -> Any:
         payload: dict[str, Any] = {"time_unit": time_unit}
-        if ticket_article_id is not None:
-            payload["ticket_article_id"] = ticket_article_id
+        if article_id is not None:
+            payload["article_id"] = article_id
         if type_id is not None:
             payload["type_id"] = type_id
         try:

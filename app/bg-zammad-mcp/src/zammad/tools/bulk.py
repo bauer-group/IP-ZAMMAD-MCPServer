@@ -131,16 +131,18 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 )
             ),
         ] = "note",
-        article_internal: Annotated[
-            bool,
+        article_visibility: Annotated[
+            str,
             Field(
                 description=(
-                    "Keep the article agent-only. Defaults to true because a "
+                    "Who may read `article_body`: 'internal' (default, agents "
+                    "only) or 'customer_visible'. Defaults to internal because a "
                     "customer-visible message multiplied by a batch is the "
-                    "expensive mistake here."
+                    "expensive mistake here. Same vocabulary as create_ticket "
+                    "and update_ticket."
                 )
             ),
-        ] = True,
+        ] = "internal",
         article_subject: Annotated[str | None, Field(max_length=200)] = None,
     ) -> Any:
         if len(ticket_ids) > MAX_BULK_TICKETS:
@@ -166,13 +168,13 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             # The trap articles.py exists to make unreachable: an internal e-mail
             # is still DELIVERED to the customer and then hidden from them in
             # their own ticket view - here, once per ticket in the batch.
-            if article_type == "email" and article_internal:
+            if article_type == "email" and article_visibility == "internal":
                 raise ToolError(
-                    "article_type='email' with article_internal=true sends the "
-                    "mail to every listed ticket's customer and then hides it "
+                    "article_type='email' with article_visibility='internal' sends "
+                    "the mail to every listed ticket's customer and then hides it "
                     "from them in their own ticket view. Pass "
-                    "article_internal=false to send a visible reply, or "
-                    "article_type='note' to leave an agent-only note."
+                    "article_visibility='customer_visible' to send a visible "
+                    "reply, or article_type='note' to leave an agent-only note."
                 )
 
         payload: dict[str, Any] = {"ticket_ids": ticket_ids}
@@ -182,7 +184,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             article: dict[str, Any] = {
                 "body": article_body,
                 "type": article_type,
-                "internal": article_internal,
+                "internal": article_visibility == "internal",
             }
             if article_subject is not None:
                 article["subject"] = article_subject

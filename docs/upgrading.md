@@ -72,6 +72,57 @@ token", usually an admin. That defeats the reason for choosing this mode.
 
 If you deliberately want that behaviour, set `MCP_ALLOW_STATIC_FALLBACK=true`.
 
+### One vocabulary for article visibility
+
+`article_internal` is gone from `create_ticket`, `update_ticket` and
+`update_tickets`, replaced by `article_visibility` taking `'customer_visible'`
+or `'internal'`.
+
+The boolean had a different default on each of them — `False` on create, `True`
+in bulk, and `update_ticket` hardcoded `internal=True` with no parameter at all,
+so "close this with a note explaining the fix" produced a note the customer
+could never read. That is the same defect the article tools were split in two to
+close, reintroduced through a side door. One named vocabulary makes it visible
+at every call site.
+
+### Every ticket is addressed by ID
+
+`merge_tickets(target_ticket_number=…)` → `merge_tickets(target_ticket_id=…)`
+and `link_tickets(source_ticket_number=…)` → `link_tickets(source_ticket_id=…)`.
+
+Zammad's API is asymmetric here — the merge route takes a NUMBER for the target
+while `links/add` takes one for the SOURCE, i.e. on opposite sides — and that
+asymmetry used to be published to callers. There was no rule to learn, only two
+neighbouring tools that disagreed. Both now take IDs and resolve the number
+internally, at the cost of one extra GET each.
+
+### `update_ticket(tags=…)` is now `replace_tags`
+
+Same behaviour, honest name: it REPLACES the ticket's whole tag list. `add_tag`
+and `remove_tag` change one tag without touching the others. The old name read
+as additive and silently discarded every tag not listed.
+
+### `update_ticket` refuses `state` and `state_id` together
+
+(Likewise `priority`/`priority_id`.) Zammad accepts both and silently applies
+one, so half of what was asked for disappeared without an error. Also,
+`create_ticket` now accepts `group_id`/`customer_id`/`state`/`priority` — the
+five associations were previously split the opposite way between create and
+update, which meant learning two rules for one object.
+
+### Other renames
+
+* `add_ticket_time_entry(ticket_article_id=…)` → `article_id`, matching the five
+  other tools that take an article.
+* `unlink_tickets` returns `removed_count` instead of `removed`, because
+  `remove_tag` returns `removed` as a plain boolean and one key must not be a
+  bool in one tool and a count in another.
+* `list_ticket_articles` now ALWAYS returns
+  `{articles, total_count, returned, order}`. It used to return a bare array
+  when nothing was dropped — and, worse, `order` was only reported in the
+  truncating branch, so `newest_first=true` on a short thread returned a
+  reversed list with no indication that it was reversed.
+
 ### Smaller changes worth knowing
 
 * **List and search results are trimmed** to the fields an agent reasons about.
