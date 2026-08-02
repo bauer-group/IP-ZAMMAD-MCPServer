@@ -26,19 +26,43 @@ import pytest
 from fastmcp import FastMCP
 
 from zammad.tools import (
+    ai,
     articles,
+    attachments,
+    bulk,
+    checklists,
+    fields,
     groups,
+    history,
+    knowledge,
+    links,
+    macros,
     notifications,
     organizations,
+    overviews,
     reference,
     tags,
     tickets,
+    time_accounting,
     users,
 )
 
+# Mirrors the registration order in server.register(): most central to
+# day-to-day ticket work first.
 MODULES = {
+    "overviews": overviews,
     "tickets": tickets,
     "articles": articles,
+    "macros": macros,
+    "bulk": bulk,
+    "links": links,
+    "checklists": checklists,
+    "time_accounting": time_accounting,
+    "attachments": attachments,
+    "history": history,
+    "knowledge": knowledge,
+    "ai": ai,
+    "fields": fields,
     "users": users,
     "organizations": organizations,
     "groups": groups,
@@ -86,46 +110,94 @@ async def _tools(mcp: FastMCP) -> dict[str, Any]:
 # update this list in the same commit, so the change shows up in review.
 EXPECTED_TOOLS = sorted(
     [
-        # tickets
+        # Worklist — the agent's actual queue, and Elasticsearch-free
+        "list_my_queues",
+        "list_queue_tickets",
+        # Tickets
         "list_tickets",
         "search_tickets",
+        "search_tickets_by_condition",
+        "count_tickets",
         "get_ticket",
+        "get_ticket_full",
         "create_ticket",
         "update_ticket",
+        "update_ticket_title",
+        "reassign_ticket_customer",
         "delete_ticket",
-        # articles
+        # Articles
         "list_ticket_articles",
         "get_ticket_article",
+        "get_article_plain",
         "reply_to_customer",
         "add_internal_note",
-        # users
+        # Macros and bulk
+        "list_macros",
+        "apply_macro_to_tickets",
+        "update_tickets",
+        # Duplicates, links and related context
+        "merge_tickets",
+        "find_related_tickets",
+        "list_customer_tickets",
+        "list_ticket_links",
+        "link_tickets",
+        "unlink_tickets",
+        # Checklists
+        "get_ticket_checklist",
+        "create_ticket_checklist",
+        "list_checklist_templates",
+        "add_checklist_items",
+        "set_checklist_item",
+        # Time accounting
+        "list_ticket_time_entries",
+        "add_ticket_time_entry",
+        # Attachments
+        "list_ticket_attachments",
+        "download_ticket_attachment",
+        # Audit and correction
+        "get_ticket_history",
+        "set_article_visibility",
+        "delete_ticket_article",
+        "unsubscribe_from_ticket",
+        # Knowledge base and house wording
+        "search_knowledge_base",
+        "get_kb_answer",
+        "list_text_modules",
+        "search_text_modules",
+        # Zammad 7 native AI (feature-gated)
+        "summarize_ticket",
+        "suggest_kb_answers",
+        # Field discovery
+        "list_ticket_fields",
+        "list_object_attributes",
+        # Users
         "get_me",
         "list_users",
         "search_users",
         "get_user",
         "create_user",
         "update_user",
-        # organizations
+        # Organizations
         "list_organizations",
         "search_organizations",
         "get_organization",
         "create_organization",
         "update_organization",
-        # groups
+        # Groups
         "list_groups",
         "get_group",
-        # tags
+        # Tags
         "list_object_tags",
         "list_all_tags",
         "search_tags",
         "add_tag",
         "remove_tag",
-        # reference
+        # Reference data
         "list_ticket_states",
         "list_ticket_priorities",
         "list_roles",
         "get_zammad_version",
-        # notifications
+        # Notifications and mentions
         "list_my_notifications",
         "mark_notification_read",
         "mark_all_notifications_read",
@@ -199,12 +271,38 @@ async def test_descriptions_only_name_real_parameters(mcp_and_ctx) -> None:  # t
 
 # ── annotations ──────────────────────────────────────────────────────────────
 
-READ_ONLY_PREFIXES = ("list_", "search_", "get_")
-# Tools that overwrite or remove existing state. Everything else that writes is
-# additive and must NOT carry destructiveHint, per the MCP spec.
+READ_ONLY_PREFIXES = ("list_", "search_", "get_", "count_")
+
+# The rule, so this set is derivable rather than a list of opinions:
+#
+#   destructiveHint=True  — the call modifies or removes state that OTHER people
+#                           depend on, and no tool in this surface trivially
+#                           undoes it.
+#   destructiveHint=False — the call is purely additive, OR it changes state that
+#                           belongs solely to the caller and another tool here
+#                           puts it straight back (mark_*_read,
+#                           unsubscribe_from_ticket).
+#
+# The distinction is not cosmetic: MCP clients use it to decide whether to ask
+# the human first, so a wrong True buries real approvals in noise and a wrong
+# False lets an agent overwrite a hundred tickets unattended.
 DESTRUCTIVE_TOOLS = {
+    # single-ticket overwrites
     "update_ticket",
+    "update_ticket_title",
+    "reassign_ticket_customer",
     "delete_ticket",
+    # bulk overwrites — these are the ones that most need a human in the loop
+    "update_tickets",
+    "apply_macro_to_tickets",
+    # irreversible or cross-object structural changes
+    "merge_tickets",
+    "unlink_tickets",
+    # article corrections, incl. changing what a customer can see
+    "set_article_visibility",
+    "delete_ticket_article",
+    # shared records
+    "set_checklist_item",
     "update_user",
     "update_organization",
     "remove_tag",

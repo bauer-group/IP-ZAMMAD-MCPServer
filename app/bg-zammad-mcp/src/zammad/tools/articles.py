@@ -4,6 +4,7 @@ Ticket-article tools - replies, internal notes, and message inspection.
 Endpoints (all under /api/v1/):
   GET  /ticket_articles/by_ticket/{ticket_id}    all articles for a ticket
   GET  /ticket_articles/{id}                     one article
+  GET  /ticket_article_plain/{id}                raw e-mail source
   POST /ticket_articles                          create (reply or note)
 
 Why two write tools instead of one
@@ -86,6 +87,24 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             f"/ticket_articles/{article_id}",
             params={"expand": str(expand).lower()},
         )
+
+    @mcp.tool(
+        name="get_article_plain",
+        description=(
+            "Fetch the raw source of an e-mail article - the original message "
+            "with its headers, as Zammad received it. Use this when the parsed "
+            "body is ambiguous and you need to see who was really on the "
+            "conversation, or which client sent it. For ordinary reading, "
+            "`get_ticket_article` is smaller and easier."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=True, destructiveHint=False, openWorldHint=True
+        ),
+    )
+    async def get_article_plain(
+        article_id: Annotated[int, Field(ge=1)],
+    ) -> Any:
+        return await ctx.request("GET", f"/ticket_article_plain/{article_id}")
 
     @mcp.tool(
         name="reply_to_customer",
@@ -193,4 +212,4 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             payload["subject"] = subject
         return await ctx.request("POST", "/ticket_articles", json=payload)
 
-    return 4
+    return 5

@@ -5,8 +5,8 @@ settings base, inbound auth, encrypted OAuth-state storage, structured logging,
 rate limiting, the operational routes, the outbound HTTP client, the **per-user
 on-behalf-of outbound resolver** (profile ``auth.outbound.type: per_user_token``)
 and the **role/claim access gate** (profile ``access_control``). THIS module now
-holds a single Zammad-specific seam: registering the eight hand-written tool
-modules behind a thin decode shim.
+holds a single Zammad-specific seam: registering the hand-written tool modules
+behind a thin decode shim.
 
 The tools were written against a context whose ``request`` returns the decoded
 JSON body on success and raises a typed ``ZammadError`` on failure. bg-mcpcore's
@@ -57,20 +57,45 @@ def register(mcp: Any, ctx: Any) -> int:
     shim = _DecodingCtx(ctx)
 
     from zammad.tools import (
+        ai,
         articles,
+        attachments,
+        bulk,
+        checklists,
+        fields,
         groups,
+        history,
+        knowledge,
+        links,
+        macros,
         notifications,
         organizations,
+        overviews,
         reference,
         tags,
         tickets,
+        time_accounting,
         users,
     )
 
+    # Ordered by how central each group is to day-to-day ticket work rather than
+    # alphabetically: the boot log reads as a description of the surface, and a
+    # client that truncates a long tool list keeps the important half.
     count = 0
     for module in (
+        overviews,
         tickets,
         articles,
+        macros,
+        bulk,
+        links,
+        checklists,
+        time_accounting,
+        attachments,
+        history,
+        knowledge,
+        ai,
+        fields,
         users,
         organizations,
         groups,

@@ -3,10 +3,14 @@ Ticket tools - the core of the Zammad MCP surface.
 
 Endpoints exercised (all under /api/v1/):
   GET    /tickets                          paginated list (ID ascending!)
-  GET    /tickets/search?query=...         full-text search
+  GET    /tickets/search?query=...         full-text search (needs Elasticsearch)
+  POST   /tickets/search                   structured condition search (index-free)
   GET    /tickets/{id}                     get one
+  GET    /tickets/{id}?all=true            ticket + articles + related records
   POST   /tickets                          create
   PUT    /tickets/{id}                     update
+  PUT    /tickets/{id}/update_title        rename, bypassing Core Workflow
+  PUT    /tickets/{id}/update_customer     reassign, bypassing Core Workflow
   DELETE /tickets/{id}                     delete (Admin/owner-only)
 
 All tools forward the authenticated user's bearer token, so Zammad's own
@@ -135,8 +139,81 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         return await ctx.request("GET", "/tickets/search", params=params)
 
     @mcp.tool(
+        name="search_tickets_by_condition",
+        description=(
+            "Search tickets with a STRUCTURED condition instead of free text. "
+            "Unlike `search_tickets` this does not depend on Elasticsearch, so it "
+            "is the reliable way to answer questions like 'open tickets for "
+            "organization X updated in the last week'. The condition is Zammad's "
+            "selector format: a map of attribute to {operator, value}, e.g. "
+            "{\"ticket.state_id\": {\"operator\": \"is\", \"value\": [1, 2, 3]}, "
+            "\"ticket.owner_id\": {\"operator\": \"is\", \"value\": "
+            "[\"current_user.id\"]}}. Common operators: 'is', 'is not', "
+            "'contains', 'starts with', 'before (relative)', 'within last "
+            "(relative)'."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=True, destructiveHint=False, openWorldHint=True
+        ),
+    )
+    async def search_tickets_by_condition(
+        condition: Annotated[
+            dict[str, Any],
+            Field(description="Zammad selector condition (see the description)"),
+        ],
+        page: Annotated[int, Field(ge=1, description="1-indexed page number")] = 1,
+        limit: Annotated[int, Field(ge=1, le=SEARCH_MAX_LIMIT)] = 25,
+        sort_by: Annotated[str | None, Field(description="e.g. 'updated_at'")] = None,
+        order_by: Annotated[str | None, Field(description="'asc' or 'desc'")] = None,
+        expand: Annotated[bool, Field(description="Inline names instead of IDs")] = True,
+    ) -> Any:
+        if not condition:
+            raise ToolError(
+                "search_tickets_by_condition needs a non-empty condition. For a "
+                "plain keyword search use search_tickets instead."
+            )
+        # POST rather than GET: the condition is a nested object, and Zammad
+        # registers both verbs on /tickets/search for exactly this reason.
+        payload: dict[str, Any] = {
+            "condition": condition,
+            "page": page,
+            "limit": limit,
+            "expand": expand,
+            "with_total_count": True,
+        }
+        if sort_by:
+            payload["sort_by"] = sort_by
+        if order_by:
+            payload["order_by"] = order_by
+        return await ctx.request("POST", "/tickets/search", json=payload)
+
+    @mcp.tool(
+        name="count_tickets",
+        description=(
+            "Return ONLY the number of tickets matching a query, without the "
+            "tickets themselves. Use this for 'how many ...' questions - it costs "
+            "a fraction of the tokens that `search_tickets` would."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=True, destructiveHint=False, openWorldHint=True
+        ),
+    )
+    async def count_tickets(
+        query: Annotated[str, Field(min_length=1, description="Zammad search query")],
+    ) -> Any:
+        return await ctx.request(
+            "GET",
+            "/tickets/search",
+            params={"query": query, "only_total_count": "true"},
+        )
+
+    @mcp.tool(
         name="get_ticket",
-        description="Fetch a single Zammad ticket by its numeric ID.",
+        description=(
+            "Fetch a single Zammad ticket by its numeric ID. Returns the ticket "
+            "fields only - use `get_ticket_full` to get the ticket together with "
+            "its articles in one call."
+        ),
         annotations=ToolAnnotations(
             readOnlyHint=True, destructiveHint=False, openWorldHint=True
         ),
@@ -150,6 +227,30 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             f"/tickets/{ticket_id}",
             params={"expand": str(expand).lower()},
         )
+
+    @mcp.tool(
+        name="get_ticket_full",
+        description=(
+            "Fetch a ticket together with EVERYTHING needed to understand it in a "
+            "single call: the ticket, every article the caller may see, and the "
+            "related users, organization, group, state and priority records. This "
+            "is the tool to reach for when asked to read, summarise or answer a "
+            "ticket - it replaces a `get_ticket` plus a `list_ticket_articles` "
+            "round trip. Returns Zammad's asset structure, where related records "
+            "are grouped by type and ID."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=True, destructiveHint=False, openWorldHint=True
+        ),
+    )
+    async def get_ticket_full(
+        ticket_id: Annotated[int, Field(ge=1)],
+    ) -> Any:
+        # Zammad's show action checks expand, then full, then all, and takes the
+        # FIRST that is set (app/controllers/tickets_controller.rb#show). Sending
+        # expand=true here - which every other tool in this module does - would
+        # silently win and return the plain ticket without any articles.
+        return await ctx.request("GET", f"/tickets/{ticket_id}", params={"all": "true"})
 
     @mcp.tool(
         name="create_ticket",
@@ -215,8 +316,29 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             str | None,
             Field(description="Comma-separated tag list, e.g. 'urgent,external'"),
         ] = None,
+        pending_time: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "ISO 8601 timestamp, required by Zammad when the ticket is "
+                    "created directly into a 'pending ...' state."
+                )
+            ),
+        ] = None,
+        extra_fields: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description=(
+                    "Custom Object-Manager attributes, as a name/value map. Use "
+                    "`list_ticket_fields` to discover what this instance defines."
+                )
+            ),
+        ] = None,
     ) -> Any:
-        payload: dict[str, Any] = {
+        # Same merge order as update_ticket: custom attributes first, so an
+        # explicit named argument always wins over a same-named custom field.
+        payload: dict[str, Any] = dict(extra_fields or {})
+        payload |= {
             "title": title,
             "group": group,
             "customer": customer,
@@ -236,6 +358,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             payload["type"] = ticket_type
         if tags is not None:
             payload["tags"] = tags
+        if pending_time is not None:
+            payload["pending_time"] = pending_time
         return await ctx.request("POST", "/tickets", json=payload)
 
     @mcp.tool(
@@ -255,7 +379,30 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     async def update_ticket(
         ticket_id: Annotated[int, Field(ge=1)],
         title: Annotated[str | None, Field(max_length=255)] = None,
+        state: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "State by NAME, e.g. 'open', 'closed', 'pending reminder'. "
+                    "Zammad resolves the name; use `list_ticket_states` if unsure."
+                )
+            ),
+        ] = None,
         state_id: Annotated[int | None, Field(ge=1)] = None,
+        pending_time: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "When a 'pending ...' state should come back up, as an ISO 8601 "
+                    "timestamp (e.g. '2026-08-12T09:00:00Z'). REQUIRED by Zammad "
+                    "whenever the state is a pending one - without it the update is "
+                    "rejected."
+                )
+            ),
+        ] = None,
+        priority: Annotated[
+            str | None, Field(description="Priority by NAME, e.g. '3 high'")
+        ] = None,
         priority_id: Annotated[int | None, Field(ge=1)] = None,
         owner_id: Annotated[int | None, Field(ge=1)] = None,
         group_id: Annotated[int | None, Field(ge=1)] = None,
@@ -263,12 +410,46 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ticket_type: Annotated[
             str | None, Field(description="Free-form ticket type label")
         ] = None,
+        tags: Annotated[
+            str | None,
+            Field(description="Comma-separated tags to SET on the ticket"),
+        ] = None,
+        article_body: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Optional note to add in the SAME request as the field changes, "
+                    "so 'close this with a note' is one atomic update. Internal by "
+                    "default - to write something the customer sees, use "
+                    "`reply_to_customer` instead."
+                )
+            ),
+        ] = None,
+        extra_fields: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description=(
+                    "Custom Object-Manager attributes to set, as a name/value map. "
+                    "Use `list_ticket_fields` to discover which exist on this "
+                    "instance and what values they accept."
+                )
+            ),
+        ] = None,
     ) -> Any:
-        payload: dict[str, Any] = {}
+        # extra_fields goes in first so a named argument always wins over a
+        # same-named custom attribute - an explicit parameter is the stronger
+        # statement of intent, and this keeps the merge order predictable.
+        payload: dict[str, Any] = dict(extra_fields or {})
         if title is not None:
             payload["title"] = title
+        if state is not None:
+            payload["state"] = state
         if state_id is not None:
             payload["state_id"] = state_id
+        if pending_time is not None:
+            payload["pending_time"] = pending_time
+        if priority is not None:
+            payload["priority"] = priority
         if priority_id is not None:
             payload["priority_id"] = priority_id
         if owner_id is not None:
@@ -279,12 +460,69 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             payload["customer_id"] = customer_id
         if ticket_type is not None:
             payload["type"] = ticket_type
+        if tags is not None:
+            payload["tags"] = tags
+        if article_body is not None:
+            payload["article"] = {"body": article_body, "type": "note", "internal": True}
         if not payload:
             raise ToolError(
                 "update_ticket needs at least one field to change. Pass e.g. "
-                "state_id, priority_id or owner_id."
+                "state, priority, owner_id or extra_fields."
             )
         return await ctx.request("PUT", f"/tickets/{ticket_id}", json=payload)
+
+    @mcp.tool(
+        name="update_ticket_title",
+        description=(
+            "Rename a ticket. Zammad exposes a dedicated endpoint for this that "
+            "bypasses Core Workflow restrictions, so use it rather than "
+            "`update_ticket` when only the title changes - a generic update can be "
+            "silently blocked by a workflow rule while this one succeeds."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=False,
+            destructiveHint=True,  # overwrites the existing title
+            idempotentHint=True,
+            openWorldHint=True,
+        ),
+    )
+    async def update_ticket_title(
+        ticket_id: Annotated[int, Field(ge=1)],
+        title: Annotated[str, Field(min_length=1, max_length=255)],
+    ) -> Any:
+        return await ctx.request(
+            "PUT", f"/tickets/{ticket_id}/update_title", json={"title": title}
+        )
+
+    @mcp.tool(
+        name="reassign_ticket_customer",
+        description=(
+            "Move a ticket to a different customer (and optionally organization). "
+            "Like `update_ticket_title` this uses Zammad's dedicated endpoint, "
+            "which bypasses Core Workflow restrictions that can silently block the "
+            "same change made through `update_ticket`."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=False,
+            destructiveHint=True,  # overwrites the existing customer
+            idempotentHint=True,
+            openWorldHint=True,
+        ),
+    )
+    async def reassign_ticket_customer(
+        ticket_id: Annotated[int, Field(ge=1)],
+        customer_id: Annotated[int, Field(ge=1, description="New customer's user ID")],
+        organization_id: Annotated[
+            int | None,
+            Field(ge=1, description="New organization ID, if it changes too"),
+        ] = None,
+    ) -> Any:
+        payload: dict[str, Any] = {"customer_id": customer_id}
+        if organization_id is not None:
+            payload["organization_id"] = organization_id
+        return await ctx.request(
+            "PUT", f"/tickets/{ticket_id}/update_customer", json=payload
+        )
 
     @mcp.tool(
         name="delete_ticket",
@@ -307,4 +545,4 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         await ctx.request("DELETE", f"/tickets/{ticket_id}")
         return {"deleted": True, "ticket_id": ticket_id}
 
-    return 6
+    return 11
