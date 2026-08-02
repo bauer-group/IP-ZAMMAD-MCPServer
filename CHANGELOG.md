@@ -1,3 +1,13 @@
+## [2.0.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v1.0.1...v2.0.0) (2026-08-02)
+
+### ⚠ BREAKING CHANGES
+
+* **tools:** unified the identifier and visibility vocabulary
+
+### 🚀 Features
+
+* **tools:** unified the identifier and visibility vocabulary ([378989e](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/378989eec0f82c4b38eeac3d8e632cf7ace0d7e2))
+
 ## [1.0.1](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v1.0.0...v1.0.1) (2026-08-02)
 
 ### 🐛 Bug Fixes
