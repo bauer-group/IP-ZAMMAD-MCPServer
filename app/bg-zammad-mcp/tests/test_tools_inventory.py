@@ -166,7 +166,7 @@ EXPECTED_TOOLS = sorted(
         "search_text_modules",
         # Zammad 7 native AI (feature-gated)
         "summarize_ticket",
-        "suggest_kb_answers",
+        "draft_kb_answer_from_ticket",
         # Field discovery
         "list_ticket_fields",
         "list_object_attributes",

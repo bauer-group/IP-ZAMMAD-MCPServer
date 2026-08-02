@@ -3,7 +3,15 @@ Zammad 7 AI-assistance tools - and their graceful degradation.
 
 Endpoints (all under /api/v1/), with the Zammad permission each needs:
   POST /tickets/{id}/summarize                        ticket.agent, read access to the group
-  POST /tickets/{id}/knowledge_base_answers           ticket.agent + knowledge_base.*
+  POST /tickets/{id}/knowledge_base_answers           ticket.agent + a KB editor role
+
+Note what the second one is NOT. Its name reads like a lookup, but
+``Ticket::KnowledgeBaseAnswersController#create`` DRAFTS A NEW knowledge-base
+article from the ticket - it writes, it does not search. Zammad does have a
+vector search over existing answers, but it lives in a controller with no route
+(verified against a running 7.1.1: ``rails routes`` has no
+``related_knowledge_base_answers`` entry), so it is unreachable over the REST
+API. Finding existing material is therefore ``search_knowledge_base``'s job.
 
 Both are optional Zammad features that may simply not be switched on here.
 Neither returns its result on the first call, and neither fails in a way an LLM
@@ -11,13 +19,12 @@ would read as failure - which is what this module exists to fix.
 
 Asynchronous by design
 ----------------------
-Zammad computes both answers in a background job. The first POST enqueues that
-job and replies HTTP 200 with ``{"result": null}`` (summarize) or
-``{"result": {"pending": true}}`` (related answers); a later POST returns the
-stored result. Handed back verbatim, that first response reads as "this ticket
-has no summary" / "nothing in the knowledge base is relevant" - a confident and
-wrong conclusion. Both tools therefore poll a few times and, if the job is still
-running, raise a ToolError that says exactly that.
+Zammad does both jobs in the background. The first POST enqueues the job and
+replies HTTP 200 with no result yet; a later POST returns the stored one. Handed
+back verbatim, that first response reads as "this ticket has no summary" or "the
+draft is empty" - a confident and wrong conclusion. Both tools therefore poll a
+few times and, if the job is still running, raise a ToolError that says exactly
+that.
 
 Feature gates, and why 422 is not the whole story
 -------------------------------------------------
@@ -140,27 +147,22 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         )
 
     @mcp.tool(
-        name="suggest_kb_answers",
+        name="draft_kb_answer_from_ticket",
         description=(
-            "Ask Zammad which knowledge base answers are relevant to a ticket, "
-            "using its AI vector search. Use it to ground a reply in existing "
-            "house material before writing anything new. Needs 'ticket.agent' "
-            "plus a knowledge-base permission ('knowledge_base.reader' or "
-            "'knowledge_base.editor'); without the latter Zammad answers HTTP "
-            "403. It is an OPTIONAL feature needing both a configured AI "
-            "provider and an enabled vector store - when either is missing the "
-            "tool fails with an explicit message and you should fall back to "
-            "`search_knowledge_base` with keywords taken from the ticket. The "
-            "vector search runs off the ticket's AI summary, so the first call "
-            "usually reports the work as pending while that summary is "
-            "generated; this tool waits and polls for a few seconds. Hits are "
-            "locale TRANSLATIONS: the excerpts map is keyed by translation id, "
-            "and the assets block resolves each translation to the answer_id "
-            "that `get_kb_answer` accepts."
+            "Ask Zammad's AI to DRAFT A NEW knowledge base article out of a "
+            "ticket, so a solution worked out once can be reused. This WRITES "
+            "a draft into the knowledge base - it does not look anything up. "
+            "To find material that already exists, use `search_knowledge_base` "
+            "instead. Needs 'ticket.agent' plus editor rights on at least one "
+            "knowledge-base category; without them Zammad answers HTTP 403 or "
+            "reports that no editable category is available. The draft is "
+            "produced by a background job, so this tool polls for a few "
+            "seconds and tells you if it is still running rather than "
+            "returning an empty result."
         ),
         annotations=generates,
     )
-    async def suggest_kb_answers(
+    async def draft_kb_answer_from_ticket(
         ticket_id: Annotated[int, Field(ge=1)],
     ) -> Any:
         path = f"/tickets/{ticket_id}/knowledge_base_answers"
@@ -171,17 +173,19 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 # Zammad's 403 body here is a bare "Not authorized", which does
                 # not hint that a knowledge-base permission is what is missing.
                 raise ToolError(
-                    "Not allowed to run the knowledge base vector search: this "
-                    "account is missing a knowledge-base permission "
-                    "('knowledge_base.reader' or 'knowledge_base.editor'). Use "
-                    "`search_knowledge_base` instead - it is open to every "
+                    "Not allowed to draft a knowledge base article from this "
+                    "ticket: the account needs editor rights on at least one "
+                    "knowledge-base category ('knowledge_base.editor'). To "
+                    "read existing material instead, use "
+                    "`search_knowledge_base`, which is open to every "
                     "authenticated user."
                 ) from exc
             except (ZammadValidationError, ZammadServerError) as exc:
                 raise _ai_unavailable(
                     exc,
-                    "suggest knowledge base answers",
-                    "use `search_knowledge_base` with keywords from the ticket instead.",
+                    "draft knowledge base articles from tickets",
+                    "write the article yourself, or search existing material with "
+                    "`search_knowledge_base`.",
                 ) from exc
             result = body.get("result") if isinstance(body, dict) else None
             if isinstance(result, dict) and not result.get("pending"):
@@ -189,12 +193,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             if attempt + 1 < POLL_ATTEMPTS:
                 await asyncio.sleep(POLL_INTERVAL_SECONDS)
         raise ToolError(
-            f"Zammad is still preparing the knowledge base suggestions for "
-            f"ticket {ticket_id} - it did not finish in time. This is NOT an "
-            "empty result: the vector search waits for the ticket's AI summary "
-            "to be generated first. Call `suggest_kb_answers` again in a few "
-            "seconds, or search the knowledge base directly with "
-            "`search_knowledge_base`."
+            f"Zammad is still drafting the knowledge base article for ticket "
+            f"{ticket_id} - it did not finish in time. This is NOT a failure "
+            "and NOT an empty draft; the job is still running. Call "
+            "`draft_kb_answer_from_ticket` again in a few seconds."
         )
 
     return 2

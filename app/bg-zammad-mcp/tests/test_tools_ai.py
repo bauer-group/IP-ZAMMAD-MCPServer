@@ -22,14 +22,14 @@ from tests.test_tools_inventory import RecordingCtx
 from zammad.errors import ZammadForbidden, ZammadServerError, ZammadValidationError
 from zammad.tools import ai
 
-EXPECTED_TOOLS = sorted(["summarize_ticket", "suggest_kb_answers"])
+EXPECTED_TOOLS = sorted(["summarize_ticket", "draft_kb_answer_from_ticket"])
 
 # Tools from other modules this module's descriptions are allowed to point at.
 CROSS_MODULE_TOOLS = {"list_ticket_articles", "search_knowledge_base", "get_kb_answer"}
 
 SUMMARY_PENDING: dict[str, Any] = {"result": None}
 SUMMARY_READY: dict[str, Any] = {"result": "Printer smokes.", "analytics": {"run_id": 5}}
-RELATED_PENDING: dict[str, Any] = {"result": {"pending": True}}
+DRAFT_PENDING: dict[str, Any] = {"result": {"pending": True}}
 RELATED_READY: dict[str, Any] = {
     "result": {"pending": False, "answer_translation_ids": [7], "excerpts": {"7": "..."}},
     "assets": {},
@@ -161,46 +161,46 @@ async def test_summarize_degrades_gracefully_when_the_feature_is_off(error: Exce
     assert len(ctx.calls) == 1
 
 
-# ── suggest_kb_answers ───────────────────────────────────────────────────────
+# ── draft_kb_answer_from_ticket ───────────────────────────────────────────────────────
 
 
-async def test_suggest_posts_to_the_related_answers_endpoint() -> None:
+async def test_draft_posts_to_the_related_answers_endpoint() -> None:
     mcp, ctx = _register([RELATED_READY])
-    await _call(mcp, "suggest_kb_answers", ticket_id=7)
+    await _call(mcp, "draft_kb_answer_from_ticket", ticket_id=7)
     assert ctx.calls == [
         {"method": "POST", "path": "/tickets/7/knowledge_base_answers"}
     ]
 
 
-async def test_suggest_polls_while_the_ticket_summary_is_generated() -> None:
-    mcp, ctx = _register([RELATED_PENDING, RELATED_READY])
-    await _call(mcp, "suggest_kb_answers", ticket_id=7)
+async def test_draft_polls_while_the_ticket_summary_is_generated() -> None:
+    mcp, ctx = _register([DRAFT_PENDING, RELATED_READY])
+    await _call(mcp, "draft_kb_answer_from_ticket", ticket_id=7)
     assert len(ctx.calls) == 2
 
 
-async def test_suggest_raises_rather_than_returning_a_pending_result() -> None:
-    mcp, ctx = _register([RELATED_PENDING])
-    with pytest.raises(Exception, match="still preparing"):
-        await _call(mcp, "suggest_kb_answers", ticket_id=7)
+async def test_draft_raises_rather_than_returning_a_pending_result() -> None:
+    mcp, ctx = _register([DRAFT_PENDING])
+    with pytest.raises(Exception, match="still drafting"):
+        await _call(mcp, "draft_kb_answer_from_ticket", ticket_id=7)
     assert len(ctx.calls) == ai.POLL_ATTEMPTS
 
 
 @pytest.mark.parametrize(
     "error",
     [
-        ZammadValidationError("Knowledge base vector search is not available.", status_code=422),
+        ZammadValidationError("Knowledge base is unavailable or not properly configured.", status_code=422),
         ZammadServerError("Please contact your administrator.", status_code=500),
     ],
 )
-async def test_suggest_degrades_gracefully_when_the_feature_is_off(error: Exception) -> None:
+async def test_draft_degrades_gracefully_when_the_feature_is_off(error: Exception) -> None:
     mcp, ctx = _register([error])
-    with pytest.raises(Exception, match="cannot suggest knowledge base answers"):
-        await _call(mcp, "suggest_kb_answers", ticket_id=7)
+    with pytest.raises(Exception, match="cannot draft knowledge base articles"):
+        await _call(mcp, "draft_kb_answer_from_ticket", ticket_id=7)
     assert len(ctx.calls) == 1
 
 
-async def test_suggest_explains_the_bare_not_authorized_403() -> None:
+async def test_draft_explains_the_bare_not_authorized_403() -> None:
     """Zammad's 403 body is "Not authorized" and names no permission."""
     mcp, _ = _register([ZammadForbidden("Not authorized", status_code=403)])
-    with pytest.raises(Exception, match=re.escape("knowledge_base.reader")):
-        await _call(mcp, "suggest_kb_answers", ticket_id=7)
+    with pytest.raises(Exception, match=re.escape("knowledge_base.editor")):
+        await _call(mcp, "draft_kb_answer_from_ticket", ticket_id=7)
