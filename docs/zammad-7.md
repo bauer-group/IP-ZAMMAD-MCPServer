@@ -24,6 +24,7 @@ configuration, which has four consequences:
 | **Opaque tokens** | Not JWTs. There is no JWKS endpoint and no offline verification, which is why every request is validated against `GET /api/v1/users/me`. See [authentication.md](authentication.md) for the caching that makes this affordable. |
 | **No discovery document** | There is no `/.well-known/openid-configuration` on the Zammad side. The MCP server publishes its *own* RFC 8414 / RFC 9728 metadata; that is what Claude reads. |
 | **2-hour access tokens** | Doorkeeper's default, with `use_refresh_token` enabled. |
+| **HTTPS callback required** | In production mode Doorkeeper enforces `force_ssl_in_redirect_uri`, so Zammad **rejects an `http://` callback URL** when you create the application ("Redirect URI must be an HTTPS/SSL URI"). `PUBLIC_BASE_URL` therefore has to be `https://…` for `AUTH_MODE=zammad` — there is no plain-HTTP shortcut, even for a first test. |
 
 `GET /api/v1/users/me` is called with `expand=true` on purpose: without it Zammad
 returns numeric `role_ids` and no `roles` array, and the role allowlist has
@@ -48,7 +49,7 @@ nothing to match against.
 | Attachments | List, and download with a size cap. |
 | History | `ticket_history`, plus article visibility correction and deletion. |
 | Knowledge base | `POST /knowledge_bases/search`, answers, text modules. |
-| AI | `POST /tickets/{id}/summarize` and `.../knowledge_base_answers` — feature-gated, see below. |
+| AI | `POST /tickets/{id}/summarize` and `.../knowledge_base_answers` — both need a configured AI provider; see below for what the second one actually does. |
 | Field discovery | `GET /ticket_create` (agent-safe) and `object_manager_attributes` (admin-only). |
 
 ### Deliberately not wired up
@@ -71,14 +72,14 @@ wrapper — open an issue and say what workflow it unblocks.
 
 ## Behaviours that will otherwise surprise you
 
-**Field-scoped search needs Elasticsearch.** `search_tickets` with
-`state.name:open` only works if the instance runs Elasticsearch. Without it
-Zammad falls back to a SQL `LIKE` over the whole query string and returns an
-empty array with HTTP 200 — not an error. A model reads that as "you have no
-open tickets". Two mitigations are in place: the tool description says so, and
-`search_tickets_by_condition` (`POST /tickets/search` with a selector condition)
-is index-independent. `list_my_queues` is index-independent too, and is usually
-the better answer anyway.
+**Field-scoped search needs a healthy Elasticsearch.** The BAUER GROUP Zammad
+stack always ships one, so `search_tickets` with `state.name:open` works as
+advertised. Worth knowing anyway: when the index is unavailable or rebuilding,
+Zammad does not error — it falls back to a SQL `LIKE` over the whole query
+string and returns an empty array with HTTP 200, which a model reads as "you
+have no open tickets". `search_tickets_by_condition` (`POST /tickets/search`
+with a selector condition) and `list_my_queues` never touch the index and are
+the right fallback.
 
 **`list_tickets` is oldest-first.** `GET /tickets` does `reorder(id: :asc)` and
 accepts no sort parameter, so on an established helpdesk it returns tickets from
@@ -105,12 +106,24 @@ one is rejected by Zammad.
 **An unknown overview slug returns HTTP 200 with an empty body**, not 404.
 `list_queue_tickets` raises rather than let that read as an empty queue.
 
-**The AI endpoints are feature-gated.** `summarize_ticket` and
-`suggest_kb_answers` return HTTP 422 unless `ai_assistance_ticket_summary` is
-enabled *and* an AI provider is configured. Both tools detect that specific
-failure and say the feature is not enabled, so the model summarises the thread
-itself instead of retrying. `summarize_ticket` also returns a null result while
-its background job runs, and polls before giving up.
+**The AI endpoints need a provider, not a licence.** Zammad's AI features are
+not a paid add-on: they call whatever provider you configure with your own
+OpenAI or Anthropic API key. What they do need is that provider *and* the
+matching assistance setting switched on. Missing either, `summarize_ticket` and
+`draft_kb_answer_from_ticket` fail — with HTTP 422 when the assistance setting
+is off, and HTTP **500** when the setting is on but no provider is configured,
+because that check raises a plain StandardError that Rails maps to 500 (with the
+message masked for non-admins). Both statuses are handled, and both tools say
+the feature is unavailable rather than retrying. `summarize_ticket` also returns
+an empty result while its background job runs, and polls before giving up.
+
+**`knowledge_base_answers` writes, it does not search.** The name reads like a
+lookup, but `Ticket::KnowledgeBaseAnswersController#create` drafts a NEW
+knowledge-base article out of the ticket. Zammad does have a vector search over
+existing answers, but its controller has no route — verified against a running
+7.1.1, where `rails routes` shows no `related_knowledge_base_answers` entry — so
+it cannot be reached over the REST API. Finding existing material is
+`search_knowledge_base`'s job.
 
 **`list_all_tags` is an admin route.** `/tag_list` requires `admin.tag` and 403s
 for a plain agent; `search_tags` is the agent-safe path.
@@ -124,9 +137,22 @@ for a plain agent; `search_tags` is the agent-safe path.
 | `PUT /tickets/{id}/update_title` | 7.0 | Uses `Service::Ticket::ForcedUpdate`, bypassing Core Workflow restrictions that can silently block the same change made through the generic `PUT`. |
 | `PUT /tickets/{id}/update_customer` | 7.0 | Same, for reassigning the customer/organization. |
 | `POST /checklist_items/create_bulk` | 7.x | Adds a whole checklist in one request instead of one call per item. |
-| `POST /tickets/{id}/summarize` | 7.x | Zammad's own ticket summarisation, when licensed. |
-| `POST /tickets/{id}/knowledge_base_answers` | 7.x | Suggests knowledge-base answers for a ticket, when licensed. |
+| `POST /tickets/{id}/summarize` | 7.x | Zammad's own ticket summarisation. Needs an AI provider configured. |
+| `POST /tickets/{id}/knowledge_base_answers` | 7.x | DRAFTS A NEW knowledge-base article from a ticket — it does not look answers up. Needs an AI provider plus editor rights on a category. |
 
-Every route in this server was verified against `zammad/zammad@stable` rather
-than assumed. If Zammad changes one, the tool will fail loudly with a typed
-error rather than silently doing nothing.
+## How this was verified
+
+Every route was checked against `zammad/zammad@stable` rather than assumed, and
+then exercised against a **real Zammad 7.1.1** running locally: 49 tool calls
+covering reads, the worklist, all four search variants, discovery, and the full
+write path (create, reply, internal note, tag, subscribe, rename, pending state,
+time entry, checklist, bulk update, delete) — all passing.
+
+Two findings on this page come from that live run rather than from the source:
+the HTTPS callback requirement, and the fact that `related_knowledge_base_answers`
+has no route. The article-visibility invariant was confirmed by reading the
+`internal` column straight out of Zammad's database after the calls:
+`reply_to_customer` → `false`, `add_internal_note` → `true`.
+
+If Zammad changes a route, the tool fails loudly with a typed error rather than
+silently doing nothing.

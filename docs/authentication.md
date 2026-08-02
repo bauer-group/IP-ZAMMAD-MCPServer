@@ -55,7 +55,12 @@ server is the OAuth client; the human AI-tool user is the resource owner.
    exists, so a lost secret is recoverable without re-registering.
 
 > **Important:** the callback URL must exactly match the value Zammad has on
-> file, including scheme (`https://`) and trailing slash (none).
+> file, including scheme and trailing slash (none). It **must be `https://`** —
+> a production-mode Zammad enforces Doorkeeper's `force_ssl_in_redirect_uri`
+> and refuses to save the application at all with an `http://` URL
+> ("Redirect URI must be an HTTPS/SSL URI"). So `PUBLIC_BASE_URL` has to be
+> HTTPS for this mode; there is no plain-HTTP shortcut, not even for a first
+> test. Verified against a live Zammad 7.1.1.
 >
 > **On scopes:** Zammad's OAuth2 server is plain Doorkeeper, configured with
 > `default_scopes :full` and `optional_scopes` commented out. Because the form

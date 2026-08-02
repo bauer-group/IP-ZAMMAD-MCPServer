@@ -69,9 +69,9 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     @mcp.tool(
         name="search_organizations",
         description=(
-            "Search Zammad organizations by name or domain. Same Elasticsearch "
-            "caveat as `search_tickets`. Pass `page` to go beyond the first "
-            "`limit` results."
+            "Search Zammad organizations by name or domain, using the same "
+            "Elasticsearch-backed query syntax as `search_tickets`. Pass "
+            "`page` to go beyond the first `limit` results."
         ),
         annotations=ToolAnnotations(
             readOnlyHint=True, destructiveHint=False, openWorldHint=True

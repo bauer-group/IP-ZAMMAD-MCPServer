@@ -102,15 +102,16 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     @mcp.tool(
         name="search_tickets",
         description=(
-            "Full-text search Zammad tickets. IMPORTANT: field-scoped queries "
-            "like `state.name:open`, `owner.email:a@b.c` or "
-            "`created_at:>=now-7d` only work when the Zammad instance runs "
-            "Elasticsearch. Without it Zammad falls back to a plain SQL LIKE "
-            "over title and number, so a field-scoped query returns an EMPTY "
-            "list rather than an error - if a search you expected to match "
-            "comes back empty, retry with plain keywords before concluding "
-            "there are no such tickets. Results are paginated: pass `page` to "
-            "go beyond the first `limit` results."
+            "Full-text search Zammad tickets, backed by Elasticsearch. "
+            "Supports field-scoped queries such as `state.name:open`, "
+            "`owner.email:a@b.c`, `organization.name:ACME` and "
+            "`created_at:>=now-7d`, and they can be combined with AND / OR. "
+            "This is the right tool for open-ended questions about tickets. "
+            "Results are paginated: pass `page` to go beyond the first "
+            "`limit` results, and check total_count to see whether more "
+            "matched. If a field-scoped query returns an empty list on an "
+            "instance without a search index, fall back to "
+            "`search_tickets_by_condition`, which never needs one."
         ),
         annotations=ToolAnnotations(
             readOnlyHint=True, destructiveHint=False, openWorldHint=True
@@ -171,9 +172,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         name="search_tickets_by_condition",
         description=(
             "Search tickets with a STRUCTURED condition instead of free text. "
-            "Unlike `search_tickets` this does not depend on Elasticsearch, so it "
-            "is the reliable way to answer questions like 'open tickets for "
-            "organization X updated in the last week'. The condition is Zammad's "
+            "Use it when the filter is exact and mechanical - a fixed set of "
+            "states, one organization, a date window - where a phrased query "
+            "could be interpreted loosely. It is also index-independent, so it "
+            "still works if the search index is rebuilding. The condition is Zammad's "
             "selector format: a map of attribute to {operator, value}, e.g. "
             "{\"ticket.state_id\": {\"operator\": \"is\", \"value\": [1, 2, 3]}, "
             "\"ticket.owner_id\": {\"operator\": \"is\", \"value\": "

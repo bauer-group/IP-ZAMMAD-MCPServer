@@ -97,8 +97,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         name="search_users",
         description=(
             "Search Zammad users by name, e-mail, login, or other indexed "
-            "fields. Same query syntax - and the same Elasticsearch caveat - "
-            "as `search_tickets`. Pass `page` to go beyond the first `limit` "
+            "fields, using the same Elasticsearch-backed query syntax as "
+            "`search_tickets`. Pass `page` to go beyond the first `limit` "
             "results."
         ),
         annotations=ToolAnnotations(

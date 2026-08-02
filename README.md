@@ -267,7 +267,10 @@ IP-ZAMMAD-MCPServer/
 - [docs/testing.md](docs/testing.md) — local & remote testing with MCP Inspector
 - [docs/troubleshooting.md](docs/troubleshooting.md) — common errors & fixes
 - [docs/ZAMMAD-MCP-SPEC.md](docs/ZAMMAD-MCP-SPEC.md) — design specification (source of truth)
+- [docs/operations.md](docs/operations.md) — key rotation, state-store backup, what to alert on, rollback
+- [docs/upgrading.md](docs/upgrading.md) — breaking changes per release, and what to do about them
 - [SECURITY.md](SECURITY.md) — trust model, disclosure contact, documented trade-offs
+- [CONTRIBUTING.md](CONTRIBUTING.md) — the gate, and how to add a tool without breaking it
 
 ---
 

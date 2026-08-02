@@ -20,11 +20,10 @@ list_my_queues
 list_queue_tickets(view="<link from above>")
 ```
 
-Why it matters: `list_my_queues` needs no search index, returns per-queue
-counts, and reflects the overviews the team actually configured. A
-`search_tickets` on `state.name:open` returns an **empty list** on an instance
-without Elasticsearch — with HTTP 200, so it reads as "you have no open
-tickets".
+Why it matters: `list_my_queues` returns per-queue counts, reflects the
+overviews the team actually configured, and needs no search index at all. A
+`search_tickets` on `state.name:open` answers a different question — every open
+ticket you *may see*, not the ones anybody decided you should work on.
 
 Note the naming asymmetry: the list gives you `link`, and that value is what
 `list_queue_tickets` wants as its `view`.
@@ -183,11 +182,13 @@ says so explicitly rather than failing opaquely.
 
 Work through it in this order — the first two account for most cases:
 
-1. **Was it a field-scoped search?** Without Elasticsearch that returns an empty
-   list, not an error. Retry with `search_tickets_by_condition`.
-2. **Is it a permissions boundary?** Every call runs as *you*. An empty result
-   can simply mean the group is not yours.
+1. **Is it a permissions boundary?** Every call runs as *you*. An empty result
+   very often just means the group is not yours.
+2. **Is the search index healthy?** Field-scoped queries need Elasticsearch. If
+   it is rebuilding, they return an empty list rather than an error — retry with
+   `search_tickets_by_condition`, which never touches the index.
 3. **Did you page?** Search results are pages. `with_total_count` is on by
    default, so compare `total_count` against what you got.
-4. **Is the feature licensed?** The AI tools return a clear "not enabled on this
-   instance" rather than a generic error.
+4. **Is an AI provider configured?** The AI tools need an OpenAI or Anthropic
+   key set up in Zammad. Without one they say so plainly rather than returning
+   a generic error.
