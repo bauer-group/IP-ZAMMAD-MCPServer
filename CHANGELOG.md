@@ -1,3 +1,9 @@
+## [5.0.1](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.0.0...v5.0.1) (2026-08-02)
+
+### 🐛 Bug Fixes
+
+* **build:** skipped the Dockerfile port checks inside the image build ([921832c](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/921832c36f6aa8f47bc091b414a335e16543a697))
+
 ## [5.0.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v4.0.1...v5.0.0) (2026-08-02)
 
 ### ⚠ BREAKING CHANGES
