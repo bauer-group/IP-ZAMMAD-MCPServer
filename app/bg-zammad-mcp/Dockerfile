@@ -41,6 +41,10 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 COPY tests/ ./tests/
+# The suite validates the shipped extensions catalogue (a malformed one would
+# otherwise leave the server running with no prompts and only a log line to
+# show for it), so the test stage needs it too — not just the runtime stage.
+COPY extensions/ ./extensions/
 
 RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir ".[test,dev]"
@@ -52,9 +56,13 @@ ENV PYTHONPATH=/app/src \
 # `env -i` wipes CI build args that would otherwise leak into Pydantic Settings
 # during test-time validation (e.g. a GitHub Actions runner exporting
 # ZAMMAD_OAUTH_CLIENT_SECRET into the shell).
+#
+# All three checks run here, not just pytest: without --cov the fail_under
+# threshold declared in pyproject never fires, and ruff/mypy were previously
+# installed nowhere in the image at all.
 RUN env -i HOME="$HOME" PATH="$PATH" PYTHONPATH="$PYTHONPATH" \
         PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
-        pytest tests/ -q --tb=short
+        sh -c "ruff check src tests && mypy src && pytest tests/ -q --tb=short --cov=src"
 
 
 # ── Stage 3: Production — minimal runtime image ──────────────────────────────
