@@ -30,15 +30,21 @@ dependencies = [
     # Shared BAUER GROUP MCP framework — settings base, inbound auth, encrypted
     # OAuth-state storage, logging, rate limiting, routes, the outbound client +
     # the profile/CLI surface. Pulled from GitHub (internal projects do not use
-    # PyPI for this package), pinned to a release tag for reproducibility. The
+    # PyPI for this package), tracking main. The
     # [redis] extra adds the RedisStore backend for the OAuth-state store.
     # bg-mcpcore transitively provides fastmcp / pydantic / pydantic-settings /
     # structlog / rich / cryptography / typer / py-key-value-aio[disk].
     #
-    # Pinned to an immutable COMMIT SHA rather than a tag: tags can be force-moved,
-    # and Dependabot's pip ecosystem cannot see PEP 508 VCS references at all, so
-    # nothing else watches this dependency. Bump it deliberately.
-    "bg-mcpcore[redis] @ git+https://github.com/bauer-group/LIB-BG-MCPCore.git@582a8fd9214824e732d57cf4d62b9f88d6a47b5a",
+    # Tracks @main deliberately: this is our own library and both MCP servers
+    # should always run its current state, so a fix lands here on the next build
+    # rather than waiting for someone to bump a SHA. Dependabot's pip ecosystem
+    # cannot see PEP 508 VCS references at all, so a pin would be watched by
+    # nothing and would simply rot.
+    #
+    # The trade is real and accepted: the same Dockerfile can build different
+    # software on different days. When a build breaks, check what moved in
+    # LIB-BG-MCPCore before suspecting this repo.
+    "bg-mcpcore[redis] @ git+https://github.com/bauer-group/LIB-BG-MCPCore.git@main",
 
     # Directly imported by this server's own code (kept explicit; also provided
     # transitively by bg-mcpcore, so the version ranges stay compatible):
