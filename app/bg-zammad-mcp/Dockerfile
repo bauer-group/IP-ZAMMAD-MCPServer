@@ -15,7 +15,8 @@
 # ── Stage 1: Builder — install Python dependencies into a relocatable prefix ──
 FROM python:3.14-alpine AS builder
 
-# git is required to install bg-mcpcore from its GitHub tag (a direct git ref).
+# git is required to install bg-mcpcore from GitHub (a direct git ref on @main,
+# so this resolves at BUILD time rather than at commit time).
 RUN apk add --no-cache build-base libffi-dev git
 
 WORKDIR /build
