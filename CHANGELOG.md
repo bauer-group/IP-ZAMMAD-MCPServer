@@ -1,3 +1,9 @@
+## [5.0.2](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.0.1...v5.0.2) (2026-08-03)
+
+### 🐛 Bug Fixes
+
+* **knowledge:** get_kb_answer never returned the answer body ([51f2bde](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/51f2bde245d5c0c2020283de755b273d0b70746d))
+
 ## [5.0.1](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.0.0...v5.0.1) (2026-08-02)
 
 ### 🐛 Bug Fixes
