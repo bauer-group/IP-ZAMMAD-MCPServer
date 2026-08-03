@@ -20,7 +20,12 @@ from fastmcp import FastMCP
 
 from tests.test_tools_inventory import RecordingCtx
 from zammad.tools import knowledge
-from zammad.tools.knowledge import ANSWER_TRANSLATION, _annotate_answer_ids, _content_ids_of
+from zammad.tools.knowledge import (
+    ANSWER_TRANSLATION_ASSET,
+    ANSWER_TRANSLATION_INDEX,
+    _annotate_answer_ids,
+    _content_ids_of,
+)
 
 EXPECTED_TOOLS = sorted(
     [
@@ -121,7 +126,7 @@ async def test_search_posts_and_pins_the_agent_url_type(mcp_and_ctx) -> None:  #
     assert payload["flavor"] == "agent"
     assert payload["page"] == 3
     assert payload["per_page"] == 5
-    assert payload["index"] == ANSWER_TRANSLATION
+    assert payload["index"] == ANSWER_TRANSLATION_INDEX
     assert payload["include_subtitle"] is True
     assert payload["include_tags"] is True
     # Optional narrowing must stay out of the body unless asked for.
@@ -157,11 +162,11 @@ def test_annotate_answer_ids_lifts_both_ids_out_of_the_agent_url() -> None:
     """Zammad indexes translations, so a hit's own id is useless downstream."""
     payload = _annotate_answer_ids(
         {
-            "result": [{"id": 7, "type": ANSWER_TRANSLATION}],
+            "result": [{"id": 7, "type": ANSWER_TRANSLATION_INDEX}],
             "details": [
                 {
                     "id": 7,
-                    "type": ANSWER_TRANSLATION,
+                    "type": ANSWER_TRANSLATION_INDEX,
                     "url": "/api/v1/knowledge_bases/1/answers/42?include_contents=7",
                 },
                 {"id": 3, "type": "KnowledgeBase::Category::Translation", "url": "/help/en-us/x"},
@@ -185,11 +190,26 @@ def test_annotate_answer_ids_tolerates_unexpected_shapes() -> None:
 
 
 def _answer_assets(answer_id: int) -> dict[str, Any]:
+    """An answer payload shaped like the one Zammad 7.1.1 actually sends.
+
+    The keys matter and were wrong here for a long time. This fixture used the
+    Rails class names ("KnowledgeBase::Answer::Translation"), the code looked
+    them up under the same constant, and the two agreed with each other while
+    both disagreed with Zammad — whose asset serializer strips the namespace
+    colons. `_content_ids_of` therefore always returned [], get_kb_answer never
+    made its second request, and every answer came back with a title and no
+    body. A fake built from the same misunderstanding as the code can only ever
+    confirm it.
+
+    Verified against a live instance:
+        GET /api/v1/knowledge_bases/4/answers/3
+        -> assets: KnowledgeBaseAnswer, KnowledgeBaseAnswerTranslation, ...
+    """
     return {
         "id": answer_id,
         "assets": {
-            "KnowledgeBase::Answer": {str(answer_id): {"id": answer_id}},
-            ANSWER_TRANSLATION: {
+            "KnowledgeBaseAnswer": {str(answer_id): {"id": answer_id}},
+            ANSWER_TRANSLATION_ASSET: {
                 "7": {"id": 7, "answer_id": answer_id, "content_id": 11},
                 "8": {"id": 8, "answer_id": answer_id, "content_id": 12},
                 # A neighbour dragged in by an inline link - not ours to expand.
@@ -197,6 +217,21 @@ def _answer_assets(answer_id: int) -> dict[str, Any]:
             },
         },
     }
+
+
+def test_the_asset_key_is_not_the_index_name() -> None:
+    """Zammad spells this model two ways and they are not interchangeable.
+
+    The search index wants the Rails class name; the asset map strips the
+    colons. One constant served both, which is how get_kb_answer shipped
+    returning answers without their content.
+    """
+    assert ANSWER_TRANSLATION_INDEX == "KnowledgeBase::Answer::Translation"
+    assert ANSWER_TRANSLATION_ASSET == "KnowledgeBaseAnswerTranslation"
+    assert "::" not in ANSWER_TRANSLATION_ASSET, (
+        "asset-graph keys never carry namespace colons - compare the "
+        "Checklist / ChecklistItem / User lookups in the other modules"
+    )
 
 
 async def test_get_kb_answer_refetches_with_the_content_ids() -> None:
@@ -230,7 +265,7 @@ async def test_get_kb_answer_does_not_refetch_without_content_ids(mcp_and_ctx) -
 def test_content_ids_of_ignores_foreign_and_malformed_translations() -> None:
     assert _content_ids_of(_answer_assets(42), 42) == ["11", "12"]
     assert _content_ids_of(_answer_assets(42), 99) == ["13"]
-    assert _content_ids_of({"assets": {ANSWER_TRANSLATION: ["nope"]}}, 42) == []
+    assert _content_ids_of({"assets": {ANSWER_TRANSLATION_ASSET: ["nope"]}}, 42) == []
     assert _content_ids_of({"assets": {}}, 42) == []
     assert _content_ids_of("not a dict", 42) == []
 

@@ -45,7 +45,18 @@ if TYPE_CHECKING:
 
 # The record class Zammad indexes, uses as the search result type, and keys the
 # asset graph by. Not an answer - one of its locale translations.
-ANSWER_TRANSLATION = "KnowledgeBase::Answer::Translation"
+# Two spellings of the same model, and they are NOT interchangeable — one
+# constant served both and get_kb_answer silently returned answers with no
+# body for it.
+#
+#   Elasticsearch index name : "KnowledgeBase::Answer::Translation"
+#   Asset-graph key          : "KnowledgeBaseAnswerTranslation"
+#
+# Zammad's asset serializer strips the namespace colons; its search index does
+# not. Anything read out of a payload's `assets` map uses the second form, as
+# the Checklist / ChecklistItem / User lookups elsewhere already do.
+ANSWER_TRANSLATION_INDEX = "KnowledgeBase::Answer::Translation"
+ANSWER_TRANSLATION_ASSET = "KnowledgeBaseAnswerTranslation"
 
 # 'agent' widens the result set to internal (unpublished) answers for holders of
 # knowledge_base.reader; 'public' restricts it to published ones for everyone.
@@ -94,7 +105,7 @@ def _content_ids_of(payload: Any, answer_id: int) -> list[str]:
     inline from the body), whose contents we have no reason to pull in.
     """
     assets = payload.get("assets") if isinstance(payload, dict) else None
-    translations = assets.get(ANSWER_TRANSLATION) if isinstance(assets, dict) else None
+    translations = assets.get(ANSWER_TRANSLATION_ASSET) if isinstance(assets, dict) else None
     if not isinstance(translations, dict):
         return []
     content_ids: list[str] = []
@@ -193,7 +204,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             "include_tags": True,
         }
         if answers_only:
-            payload["index"] = ANSWER_TRANSLATION
+            payload["index"] = ANSWER_TRANSLATION_INDEX
         if knowledge_base_id is not None:
             payload["knowledge_base_id"] = knowledge_base_id
         if locale is not None:
