@@ -8,31 +8,12 @@ name invites the opposite reading, so it is worth stating once — the supported
 backend is Zammad 7.x regardless of the number in that variable, and
 `get_zammad_version` reports what your instance actually runs.
 
-## Pin a version in production
-
-The compose files default to `latest` because a template with a fixed tag goes
-stale the moment the next release ships. That default is right for the template
-and wrong for your deployment: this server publishes breaking changes as major
-releases, and has shipped several in one day. On `latest`, an unrelated
-redeploy — a host reboot, a Coolify restart — can rename the parameters your
-prompts and macros pass.
-
-Set an exact tag in your own `.env`:
-
-```ini
-ZAMMAD_MCP_VERSION=5.0.2
-```
-
-`5.0` and `5` also exist if you want patch or minor updates to flow
-automatically. Raise the pin deliberately, after reading the section below for
-that release.
-
 ## How to upgrade, generally
 
 1. Read the release notes for breaking changes.
 2. Diff `.env.example` against your `.env` — new variables appear there first,
    and an unknown one is silently ignored rather than rejected.
-3. Raise `ZAMMAD_MCP_VERSION`, pull, redeploy.
+3. Pull the new image and redeploy.
 4. Run the verification block in [operations.md](operations.md#verifying-a-deployment).
 
 Nothing here owns data: Zammad holds the tickets, and the OAuth state store is
