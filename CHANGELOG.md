@@ -1,3 +1,5 @@
+## [5.0.3](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.0.2...v5.0.3) (2026-08-06)
+
 ## [5.0.2](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.0.1...v5.0.2) (2026-08-03)
 
 ### 🐛 Bug Fixes
