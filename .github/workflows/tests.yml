@@ -54,7 +54,7 @@ jobs:
         working-directory: app/bg-zammad-mcp
     steps:
       - name: 📥 Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # Single version on purpose: pyproject declares requires-python >= 3.14
       # and both ruff (target-version) and mypy (python_version) target 3.14.
