@@ -14,6 +14,7 @@ ability to authenticate.
 
 from __future__ import annotations
 
+import string
 from typing import Any
 
 import pytest
@@ -25,12 +26,17 @@ from config import Settings
 from tests.test_tools_inventory import MODULES, RecordingCtx
 
 PROFILE_PATH = "src/profiles/zammad.json"
+STATIC_DIR = "src/static"
+
+
+def _repo_path(relative: str) -> Any:
+    from pathlib import Path
+
+    return Path(__file__).resolve().parent.parent / relative
 
 
 def _profile() -> Any:
-    from pathlib import Path
-
-    return load_profile(str(Path(__file__).resolve().parent.parent / PROFILE_PATH))
+    return load_profile(str(_repo_path(PROFILE_PATH)))
 
 
 # ── OAuth discovery surface ──────────────────────────────────────────────────
@@ -49,6 +55,9 @@ async def zammad_app(base_zammad_env, tmp_path) -> Any:  # type: ignore[no-untyp
         _profile(),
         Settings(),
         version="test",
+        # main.py passes static_dir, which is what registers / and /logo.svg.
+        # Omitting it here would leave the landing page untested.
+        static_dir=str(_repo_path(STATIC_DIR)),
         extra_middleware=[WriteAuditMiddleware()],
     )
 
@@ -83,6 +92,30 @@ async def test_healthz_needs_no_auth(zammad_app) -> None:  # type: ignore[no-unt
 
     with TestClient(zammad_app.http_app()) as client:
         assert client.get("/healthz").status_code == 200
+
+
+async def test_landing_page_resolves_every_placeholder(zammad_app) -> None:  # type: ignore[no-untyped-def]
+    """The status page must not ship a raw `$name` to the browser.
+
+    bg-mcpcore renders index.html with ``string.Template.safe_substitute``, which
+    leaves an unknown placeholder in the output instead of raising. So a variable
+    the framework does not supply fails silently and visibly: the page renders,
+    the card just reads "$whatever". Asserting against the SERVED html (rather
+    than a hardcoded list of expected names) keeps this honest if the framework's
+    variable set ever changes.
+
+    Regression: the bg-mcpcore migration moved rendering into the framework,
+    which supplies five variables and no seam for a sixth — leaving the page's
+    Zammad-backend card showing a literal `$zammad_url`.
+    """
+    from starlette.testclient import TestClient
+
+    with TestClient(zammad_app.http_app()) as client:
+        response = client.get("/")
+
+    assert response.status_code == 200
+    unresolved = string.Template(response.text).get_identifiers()
+    assert not unresolved, f"landing page shipped unresolved placeholders: {unresolved}"
 
 
 # ── audit middleware ─────────────────────────────────────────────────────────

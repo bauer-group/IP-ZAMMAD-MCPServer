@@ -89,6 +89,9 @@
             box-shadow: 0 12px 24px rgba(35, 31, 28, 0.06);
             border-color: var(--orange-200);
         }
+        /* An odd number of cards would leave a half-empty final row in the
+           two-column grid; the last one spans instead. */
+        .info-card.wide { grid-column: 1 / -1; }
         .info-label {
             font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;
             color: var(--text-muted); font-weight: 600; margin-bottom: 0.5rem;
@@ -228,14 +231,7 @@
                 </div>
             </div>
 
-            <div class="info-card">
-                <div class="info-label">Zammad Backend</div>
-                <div class="info-value">
-                    <span style="font-family: var(--font-mono); font-size: 0.95rem; overflow-wrap: anywhere;">$zammad_url</span>
-                </div>
-            </div>
-
-            <div class="info-card">
+            <div class="info-card wide">
                 <div class="info-label">Documentation</div>
                 <div class="info-value">
                     <a class="docs-link" href="https://github.com/bauer-group/IP-ZAMMAD-MCPServer#readme" target="_blank" rel="noopener noreferrer">README &amp; setup guides &rarr;</a>
