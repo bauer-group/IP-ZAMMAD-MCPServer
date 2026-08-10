@@ -1,3 +1,9 @@
+## [5.0.5](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.0.4...v5.0.5) (2026-08-10)
+
+### ♻️ Refactoring
+
+* **ui:** dropped the duplicate documentation card ([248a6e6](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/248a6e6679a3ae5d6458950917bffed596668b72))
+
 ## [5.0.4](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.0.3...v5.0.4) (2026-08-10)
 
 ### 🐛 Bug Fixes
