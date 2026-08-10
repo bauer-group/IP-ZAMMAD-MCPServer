@@ -1,3 +1,9 @@
+## [5.0.4](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.0.3...v5.0.4) (2026-08-10)
+
+### 🐛 Bug Fixes
+
+* **ui:** removed the landing-page card that never resolved ([6e9832d](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/6e9832def4b57a204014827f335e3f645df0b913))
+
 ## [5.0.3](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.0.2...v5.0.3) (2026-08-06)
 
 ## [5.0.2](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.0.1...v5.0.2) (2026-08-03)
