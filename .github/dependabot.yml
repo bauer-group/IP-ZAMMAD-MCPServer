@@ -6,6 +6,19 @@
 #   2. Image references inside docker-compose*.yml files
 #   3. bg-zammad-mcp base image (python:3.14-alpine)
 #   4. bg-zammad-mcp Python deps (pyproject.toml)
+#
+# COMMIT PREFIXES DECIDE WHETHER AN UPDATE SHIPS
+#   docker-release.yml only builds and pushes the image when semantic-release
+#   actually cuts a release (`if: needs.release.outputs.release-created`). A
+#   `chore(...)` update therefore lands on main but never reaches a published
+#   image — it rides along with whatever releasing commit happens to come next,
+#   which for a runtime dependency can be weeks.
+#
+#   So the two ecosystems that change what runs INSIDE the image use `fix(...)`
+#   and cut their own patch: the base image (3) and the Python deps (4). The
+#   two that do not are deliberately left on `chore(...)`: GitHub Actions (1)
+#   never enters the build context, and the compose files (2) describe how the
+#   image is deployed, not what it contains.
 # =============================================================================
 
 version: 2
@@ -53,7 +66,9 @@ updates:
       - "docker"
       - "dependabot"
     commit-message:
-      prefix: "chore(docker)"
+      # fix(...) so a base-image CVE patch cuts a release and rebuilds the
+      # image itself, rather than waiting for an unrelated commit.
+      prefix: "fix(docker)"
 
   # bg-zammad-mcp Python deps (declared in pyproject.toml)
   - package-ecosystem: "pip"
@@ -68,4 +83,6 @@ updates:
       - "python"
       - "dependabot"
     commit-message:
-      prefix: "chore(deps)"
+      # fix(...) — these packages are installed into the image, so an update
+      # that never triggers a build is an update that never ships.
+      prefix: "fix(deps)"
