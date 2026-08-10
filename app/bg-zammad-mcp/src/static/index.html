@@ -89,9 +89,6 @@
             box-shadow: 0 12px 24px rgba(35, 31, 28, 0.06);
             border-color: var(--orange-200);
         }
-        /* An odd number of cards would leave a half-empty final row in the
-           two-column grid; the last one spans instead. */
-        .info-card.wide { grid-column: 1 / -1; }
         .info-label {
             font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;
             color: var(--text-muted); font-weight: 600; margin-bottom: 0.5rem;
@@ -228,13 +225,6 @@
                 <div class="info-label">Auth Mode</div>
                 <div class="info-value">
                     <span class="auth-pill">$auth_mode</span>
-                </div>
-            </div>
-
-            <div class="info-card wide">
-                <div class="info-label">Documentation</div>
-                <div class="info-value">
-                    <a class="docs-link" href="https://github.com/bauer-group/IP-ZAMMAD-MCPServer#readme" target="_blank" rel="noopener noreferrer">README &amp; setup guides &rarr;</a>
                 </div>
             </div>
 
