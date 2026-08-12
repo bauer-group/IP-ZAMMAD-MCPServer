@@ -59,6 +59,25 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Attachment text extraction (PDF / DOCX / XLSX / RTF). Optional so the server
+# still starts without it - a missing extractor degrades an attachment to
+# "blob plus a reason", it does not stop the process.
+#
+# Every entry is PURE PYTHON on purpose: the production image is
+# python:3.14-alpine, and musl has no manylinux wheels, so anything with a C
+# extension would be compiled from source at image-build time. That, together
+# with lxml's entity-resolving default parser, is why python-docx is absent and
+# DOCX is read with the standard library instead - see
+# docs/adr/0001-attachment-decoding-safety.md.
+documents = [
+    "pypdf>=5.1.0,<7.0.0",
+    "openpyxl>=3.1.5,<4.0.0",
+    "striprtf>=0.0.29,<1.0.0",
+    # Refuses DTDs and entity declarations at the PARSER, so the guard holds
+    # wherever in the document a declaration sits and whatever encoding it
+    # uses - which a byte-level scan of the leading kilobytes does not.
+    "defusedxml>=0.7.1,<1.0.0",
+]
 test = [
     "pytest>=8.3.0,<10.0.0",
     "pytest-asyncio>=0.24.0,<2.0.0",

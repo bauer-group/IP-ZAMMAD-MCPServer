@@ -27,7 +27,7 @@ COPY src/ ./src/
 # Install into /install so the production stage can copy a clean, isolated tree.
 # `--no-deps` is intentionally NOT used - we want transitive deps included.
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir --prefix=/install .
+ && pip install --no-cache-dir --prefix=/install ".[documents]"
 
 
 # ── Stage 2: Test — lint, type-check and test; the build fails on any of them ─
@@ -48,7 +48,7 @@ COPY tests/ ./tests/
 COPY extensions/ ./extensions/
 
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir ".[test,dev]"
+ && pip install --no-cache-dir ".[test,dev,documents]"
 
 ENV PYTHONPATH=/app/src \
     PYTHONDONTWRITEBYTECODE=1 \
