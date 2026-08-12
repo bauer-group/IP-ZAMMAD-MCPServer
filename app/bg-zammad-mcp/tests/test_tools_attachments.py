@@ -476,3 +476,107 @@ async def test_the_charset_from_the_response_header_wins() -> None:
     )
     assert result.structured_content["content"] == "grüße"
     assert result.structured_content["decoding"]["charset"] == "windows-1252"
+
+
+# ── documents come back as text ──────────────────────────────────────────────
+
+
+def _docx_bytes(*paragraphs: str) -> bytes:
+    import io
+    import zipfile
+
+    ns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    body = "".join(f"<w:p><w:r><w:t>{p}</w:t></w:r></w:p>" for p in paragraphs)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", "<Types/>")
+        zf.writestr("word/document.xml", f"<w:document {ns}><w:body>{body}</w:body></w:document>")
+    return buf.getvalue()
+
+
+async def test_a_docx_comes_back_as_extracted_text() -> None:
+    docx = _docx_bytes("Angebot 4711")
+    mcp, _ = _build_raw(
+        # Declared as octet-stream: the type is found in the bytes, not the label.
+        [_one("angebot.docx", "application/octet-stream", len(docx))],
+        [_raw(docx, "application/octet-stream")],
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    sc = result.structured_content
+    assert sc["content_kind"] == "extracted_text"
+    assert sc["content"] == "Angebot 4711"
+    assert sc["extraction"]["status"] == "ok"
+    assert sc["extraction"]["tool"] == "zipfile+defusedxml"
+
+
+async def test_rtf_is_stripped_rather_than_returned_raw() -> None:
+    rtf = rb"{\rtf1\ansi\deff0 {\fonttbl{\f0 Arial;}}\f0 Technische Daten\par}"
+    mcp, _ = _build_raw(
+        [_one("daten.rtf", "application/msword", len(rtf))],
+        [_raw(rtf, "application/msword")],
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    sc = result.structured_content
+    assert sc["content_kind"] == "extracted_text"
+    assert "Technische Daten" in sc["content"]
+    assert "\rtf1" not in sc["content"]
+
+
+async def test_a_failed_extraction_of_a_textual_document_falls_back_to_text(
+    monkeypatch: Any,
+) -> None:
+    """RTF is text underneath. Losing the stripper must not lose the file."""
+    from zammad import extract as extract_module
+
+    def _boom(_data: bytes) -> str:
+        raise extract_module.ExtractionRefused("stripper unavailable")
+
+    monkeypatch.setitem(extract_module._EXTRACTORS, "application/rtf", (_boom, "striprtf"))
+
+    rtf = rb"{\rtf1\ansi Technische Daten\par}"
+    mcp, _ = _build_raw(
+        [_one("daten.rtf", "application/rtf", len(rtf))], [_raw(rtf, "application/rtf")]
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    sc = result.structured_content
+    assert sc["content_kind"] == "text", "a textual document degrades to text, not to a blob"
+    assert "Technische Daten" in sc["content"]
+    assert sc["extraction"]["status"] == "failed"
+
+
+async def test_a_failed_extraction_of_a_binary_document_falls_back_to_a_blob() -> None:
+    pdf = b"%PDF-1.7\nbroken"
+    mcp, _ = _build_raw(
+        [_one("kaputt.pdf", "application/pdf", len(pdf))], [_raw(pdf, "application/pdf")]
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    sc = result.structured_content
+    assert sc["content_kind"] == "blob"
+    assert sc["extraction"]["status"] == "failed"
+    assert sc["extraction"]["reason"], "the model must be able to say WHY"
+
+
+async def test_mode_raw_skips_extraction_entirely() -> None:
+    docx = _docx_bytes("Angebot 4711")
+    mcp, _ = _build_raw(
+        [_one("angebot.docx", "application/octet-stream", len(docx))],
+        [_raw(docx, "application/octet-stream")],
+    )
+    result = await _call(
+        mcp,
+        "download_ticket_attachment",
+        ticket_id=5,
+        article_id=42,
+        attachment_id=7,
+        mode="raw",
+    )
+    assert result.structured_content["extraction"]["status"] == "not_applicable"
+    assert result.structured_content["content_kind"] == "blob"

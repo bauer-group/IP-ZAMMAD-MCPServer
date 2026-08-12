@@ -49,9 +49,17 @@ What comes back
 ---------------
 Images return as an MCP ImageContent block, so the model actually sees the
 screenshot rather than a base64 string. Text returns decoded, with the charset
-that worked and whether the result is lossy. Everything else returns as
-metadata plus a base64 blob. ``mode`` overrides the routing: 'text' forces a
-decode, 'raw' forces the blob. Nothing is refused for being binary any more.
+that worked and whether the result is lossy. PDF, DOCX, XLSX and RTF return as
+extracted text, with an ``extraction`` block saying what happened. Everything
+else returns as metadata plus a base64 blob. ``mode`` overrides the routing:
+'text' forces a decode, 'raw' forces the blob. Nothing is refused for being
+binary any more.
+
+Two fallbacks worth knowing about. A document whose extraction fails but which
+is TEXT underneath - RTF - degrades to its raw text rather than to a blob:
+losing the stripper must not lose the file. A binary document that fails
+degrades to a blob carrying the reason, so the model can say why instead of
+speculating over an empty string.
 
 The bytes reach us through ``ctx.request_raw``. The ordinary ``ctx.request``
 decodes a 2xx body as JSON or as httpx's ``Response.text`` - a UTF-8 decode
@@ -76,7 +84,7 @@ from mcp.types import (
 )
 from pydantic import AnyUrl, Field
 
-from .. import media
+from .. import extract, media
 from ..projection import envelope
 from . import ToolContext
 
@@ -248,12 +256,26 @@ async def _build_result(
     if kind is media.Kind.TEXT:
         return _text_result(base, data, charset)
 
-    if kind is media.Kind.DOCUMENT and detection.textual:
-        # RTF and friends are text underneath. Extraction (which strips the
-        # control words) is wired in separately; without it the raw text is
-        # degraded but perfectly readable, and returning a blob instead would
-        # reintroduce exactly the dead end this feature exists to remove.
-        return _text_result(base, data, charset)
+    if kind is media.Kind.DOCUMENT:
+        result = await extract.extract(data, mime_type=detection.mime_type)
+        base["extraction"] = {
+            "status": result.status,
+            "tool": result.tool,
+            "reason": result.reason,
+        }
+        if result.status in {"ok", "partial"}:
+            base["content"] = result.text
+            base["content_kind"] = "extracted_text"
+            return ToolResult(
+                content=[TextContent(type="text", text=result.text or "")],
+                structured_content=base,
+            )
+        if detection.textual:
+            # RTF and friends are text underneath. Losing the stripper must not
+            # lose the file: the raw text is degraded but perfectly readable,
+            # and a blob here would reintroduce exactly the dead end this
+            # feature exists to remove.
+            return _text_result(base, data, charset)
 
     return _blob_result(base, data, detection, size)
 
