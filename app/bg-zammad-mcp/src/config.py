@@ -90,6 +90,49 @@ class Settings(BaseMcpSettings):
     zammad_http_timeout: int = Field(default=30, ge=1, le=300)
     zammad_verify_tls: bool = True
 
+    # ── Attachment limits ────────────────────────────────────────────────────
+    # These were hardcoded constants inside a tool module, which put them out of
+    # an operator's reach entirely. All four byte limits measure DECODED bytes:
+    # base64 inflates by 4/3, so a limit on the encoded string would silently
+    # pass only three quarters of its nominal value and be inexplicable to the
+    # caller. Zammad's own body limit applies to the inflated size, so the
+    # article ceiling keeps headroom (25 MiB of payload is roughly 33 MiB of
+    # request body).
+    zammad_attachment_max_read_bytes: int = Field(
+        default=5 * 1024 * 1024,
+        ge=1,
+        le=100 * 1024 * 1024,
+        description="Default max_bytes for download_ticket_attachment.",
+    )
+    zammad_attachment_read_ceiling_bytes: int = Field(
+        default=20 * 1024 * 1024,
+        ge=1,
+        le=100 * 1024 * 1024,
+        description=(
+            "Hard ceiling on max_bytes. Without it a model that hits the size "
+            "guard simply retries with a larger number."
+        ),
+    )
+    zammad_attachment_upload_enabled: bool = Field(
+        default=True,
+        description=(
+            "Allow attaching files. When false the attachments parameter is "
+            "removed from the tool schemas rather than rejected at call time."
+        ),
+    )
+    zammad_attachment_max_upload_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        ge=1,
+        le=100 * 1024 * 1024,
+        description="Max decoded size of a single uploaded attachment.",
+    )
+    zammad_attachment_max_article_bytes: int = Field(
+        default=25 * 1024 * 1024,
+        ge=1,
+        le=200 * 1024 * 1024,
+        description="Max decoded size of all attachments in one article.",
+    )
+
     # ── Zammad OAuth2 (AUTH_MODE=zammad) ──────────────────────────────────────
     zammad_oauth_client_id: str | None = None
     zammad_oauth_client_secret: SecretStr | None = None
@@ -184,6 +227,20 @@ class Settings(BaseMcpSettings):
 
     def validate_provider_auth(self) -> None:
         """Per-mode credential checks (core invariants already ran)."""
+        # Attachment limits first: both combinations below fail every affected
+        # call at runtime, which is a far worse place to discover them than boot.
+        if self.zammad_attachment_read_ceiling_bytes < self.zammad_attachment_max_read_bytes:
+            raise ValueError(
+                "ZAMMAD_ATTACHMENT_READ_CEILING_BYTES must be >= "
+                "ZAMMAD_ATTACHMENT_MAX_READ_BYTES, otherwise the default read "
+                "size is above its own hard ceiling and every read fails."
+            )
+        if self.zammad_attachment_max_article_bytes < self.zammad_attachment_max_upload_bytes:
+            raise ValueError(
+                "ZAMMAD_ATTACHMENT_MAX_ARTICLE_BYTES must be >= "
+                "ZAMMAD_ATTACHMENT_MAX_UPLOAD_BYTES, otherwise a single file at "
+                "the per-file limit can never be attached."
+            )
         if self.auth_mode is AuthMode.NONE:
             if not _has_value(self.zammad_api_token):
                 raise ValueError(
