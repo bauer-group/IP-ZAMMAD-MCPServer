@@ -253,3 +253,78 @@ Work through it in this order — the first two account for most cases:
 4. **Is an AI provider configured?** The AI tools need an OpenAI or Anthropic
    key set up in Zammad. Without one they say so plainly rather than returning
    a generic error.
+
+## Read a file a customer attached
+
+Just ask about it — no separate download step, and no need to know the format:
+
+> "Was steht im Datenblatt an Ticket 4711?"
+
+The agent calls `list_ticket_attachments` for the `article_id` /
+`attachment_id` pair, then `download_ticket_attachment`. What comes back
+depends on what the file actually is, not on how it was labelled at upload:
+
+| File | Result |
+| ---- | ------ |
+| Screenshot (PNG/JPEG/GIF/WebP) | the image itself — the agent can see it |
+| Text, CSV, log, JSON, XML | the text, with the character set that decoded it |
+| PDF, Word, Excel, RTF | the extracted text |
+| Anything else | metadata plus the raw bytes, and a sentence saying why |
+
+A file whose upload declared the wrong type still reads correctly — an RTF sent
+as `application/msword` is recognised from its bytes. If the automatic routing
+gets something wrong, `mode="text"` forces a text decode and `mode="raw"`
+returns the untouched bytes.
+
+## Attach a generated file to a ticket
+
+Ask for the analysis and the delivery in one turn. The file and the message
+become a single article, so the customer receives one mail:
+
+> "Werte die Fehlerzahlen aus Ticket 4711 aus und schick dem Kunden die
+> Tabelle als CSV mit."
+
+The agent calls `reply_to_customer` once:
+
+```json
+{
+  "ticket_id": 4711,
+  "body": "Anbei die Auswertung der Fehlerzahlen.",
+  "attachments": [
+    {"filename": "fehlerzahlen.csv", "text": "Datum;Anzahl\n2026-08-01;12\n"}
+  ]
+}
+```
+
+`add_internal_note` and `create_ticket` take the same `attachments` parameter.
+Visibility stays in the tool name — a file sent with `add_internal_note` is as
+invisible to the customer as the note itself.
+
+## Carry a file from one ticket to another
+
+`copy_from` moves the bytes server-side, so the file never passes through the
+model's context: no token cost, byte-identical, and no size limit beyond the
+configured one.
+
+> "Nimm das Datenblatt aus #4711 mit in die Antwort auf #4890."
+
+```json
+{
+  "ticket_id": 4890,
+  "body": "Das Datenblatt aus dem Vorgang 4711, wie besprochen.",
+  "attachments": [
+    {"copy_from": {"ticket_id": 4711, "article_id": 91, "attachment_id": 7}}
+  ]
+}
+```
+
+Get the `article_id` / `attachment_id` pair from `list_ticket_attachments` on
+the source ticket — guessing them returns 403.
+
+**Two things this deliberately does not do.** Executables are refused, by
+extension and by magic bytes, on every path including `copy_from` — but a
+`.zip` containing an `.exe` passes, so this is a tripwire against the obvious
+accident and not virus scanning. And an operator can switch uploading off
+entirely with `ZAMMAD_ATTACHMENT_UPLOAD_ENABLED=false`, in which case the
+`attachments` parameter is absent from the tool schemas rather than failing at
+call time.

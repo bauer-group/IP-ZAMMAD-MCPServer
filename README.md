@@ -269,6 +269,7 @@ IP-ZAMMAD-MCPServer/
 - [docs/ZAMMAD-MCP-SPEC.md](docs/ZAMMAD-MCP-SPEC.md) — design specification (source of truth)
 - [docs/operations.md](docs/operations.md) — key rotation, state-store backup, what to alert on, rollback
 - [docs/upgrading.md](docs/upgrading.md) — breaking changes per release, and what to do about them
+- [docs/adr/](docs/adr/) — architecture decision records, starting with [attachment decoding safety](docs/adr/0001-attachment-decoding-safety.md)
 - [SECURITY.md](SECURITY.md) — trust model, disclosure contact, documented trade-offs
 - [CONTRIBUTING.md](CONTRIBUTING.md) — the gate, and how to add a tool without breaking it
 

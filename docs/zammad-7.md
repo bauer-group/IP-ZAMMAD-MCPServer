@@ -46,7 +46,7 @@ nothing to match against.
 | Links & merge | `/links`, `ticket_merge`, `ticket_related`, `ticket_customer`. |
 | Checklists | Incl. the 7.x `checklist_items/create_bulk` route and templates. |
 | Time accounting | `/tickets/{id}/time_accountings`. |
-| Attachments | List, and download with a size cap. |
+| Attachments | List; read images, text, PDF, Word, Excel and RTF; attach files from text, base64 or another ticket. The type comes from the bytes, so a mislabelled upload still reads correctly. Not virus scanning — see [ADR 0001](adr/0001-attachment-decoding-safety.md). |
 | History | `ticket_history`, plus article visibility correction and deletion. |
 | Knowledge base | `POST /knowledge_bases/search`, answers, text modules. |
 | AI | `POST /tickets/{id}/summarize` and `.../knowledge_base_answers` — both need a configured AI provider; see below for what the second one actually does. |
