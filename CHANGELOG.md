@@ -1,3 +1,17 @@
+## [5.1.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.0.5...v5.1.0) (2026-08-12)
+
+### 🚀 Features
+
+* **attachments:** added byte-first file-type detection ([94a2c44](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/94a2c443e7190f2587a1658bf5e4397aa25df06f))
+* **attachments:** added document text extraction ([07efd7c](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/07efd7c8f26148238d89373ed952950a5b7541ae))
+* **attachments:** added upload assembly with three sources ([54ba6e7](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/54ba6e73bc69e6b0f1b9363e42db3bbf855babf5))
+* **attachments:** attached files from the article-creating tools ([bb81f42](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/bb81f42e767550c43a8f4d61a49fca50210974de))
+* **attachments:** read images, text and unknown binaries ([fa1584e](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/fa1584e26ea74124a7e7622321fad72c26b977be))
+* **attachments:** returned documents as extracted text ([e3eaad4](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/e3eaad470176194f41e30ce9213554f4b06aa962))
+* **audit:** recorded which files a write sent ([33799f6](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/33799f6f6a82ca524aa2fa9915435b7783c69a68))
+* **config:** exposed the attachment limits as settings ([981402a](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/981402a3c6f41ae7c313cb78cecefb3806c5ff66))
+* **server:** added a byte-preserving upstream call ([8974d1a](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/8974d1a1897d82c7a0cedd69661ea9bf7f9a319e))
+
 ## [5.0.5](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.0.4...v5.0.5) (2026-08-10)
 
 ### ♻️ Refactoring
