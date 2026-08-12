@@ -1,3 +1,20 @@
+## [6.0.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.1.0...v6.0.0) (2026-08-12)
+
+### ⚠ BREAKING CHANGES
+
+* **attachments:** the three removed ZAMMAD_ATTACHMENT_MAX_READ_BYTES
+/ _READ_CEILING_BYTES / _MAX_UPLOAD_BYTES settings are replaced by
+ZAMMAD_ATTACHMENT_MAX_TRANSFER_BYTES. Pydantic ignores unknown env
+vars, so a deployment that set the old names would silently fall
+back to defaults - check your .env. download_ticket_attachment no
+longer accepts max_bytes; its result gains truncated and, when
+truncated, full_text_bytes, and a very large binary now returns
+content_kind "metadata_only" instead of a blob.
+
+### 🐛 Bug Fixes
+
+* **attachments:** replaced the contradictory size limits ([54cde7d](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/54cde7d9b74ad2a8e424a4dd1101ac27dc198cc5))
+
 ## [5.1.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.0.5...v5.1.0) (2026-08-12)
 
 ### 🚀 Features
