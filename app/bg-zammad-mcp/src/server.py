@@ -35,6 +35,13 @@ class _DecodingCtx:
     Delegates to ``ctx.request_json``, binding Zammad's typed-error factory so a
     non-2xx response raises the same ``ZammadError`` subclass the eight tool
     modules already expect — they need no changes.
+
+    ``request_raw`` is the byte-preserving counterpart. ``request_json`` decodes
+    a 2xx body as JSON or as ``response.text`` — a UTF-8 decode with
+    ``errors='replace'`` — which destroys binary content irreversibly. Core's
+    own ``ctx.request`` already returns the untouched ``httpx.Response``, so the
+    bytes were always reachable; only this shim hid them. Attachments are the
+    single caller.
     """
 
     def __init__(self, ctx: Any) -> None:
@@ -50,6 +57,23 @@ class _DecodingCtx:
             error_factory=lambda status, body: from_status(status, body=body),
             **kwargs,
         )
+
+    async def request_raw(self, method: str, path: str, **kwargs: Any) -> Any:
+        """Upstream call whose body is NOT decoded. Raises the same typed errors."""
+        from zammad.errors import from_status
+
+        response = await self._ctx.request(method, path, **kwargs)
+        if 200 <= response.status_code < 300:
+            return response
+        body: dict[str, Any] = {}
+        if "json" in response.headers.get("content-type", ""):
+            try:
+                parsed = response.json()
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, dict):
+                body = parsed
+        raise from_status(response.status_code, body=body)
 
 
 # Tags applied to each module's tools after registration. With 75 tools the

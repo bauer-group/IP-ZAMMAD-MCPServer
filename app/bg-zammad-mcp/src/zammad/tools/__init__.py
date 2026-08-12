@@ -27,12 +27,17 @@ class ToolContext(Protocol):
 
     Implemented at runtime by ``server._DecodingCtx``. ``request`` returns the
     decoded body (dict/list/str) on a 2xx response and raises a typed
-    ``zammad.errors.ZammadError`` on any non-2xx response.
+    ``zammad.errors.ZammadError`` on any non-2xx response. ``request_raw``
+    returns the undecoded ``httpx.Response`` for callers that must not lose
+    bytes — attachments, and nothing else. Its return type stays ``Any`` so
+    this module keeps its zero imports.
     """
 
     settings: Any
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any: ...
+
+    async def request_raw(self, method: str, path: str, **kwargs: Any) -> Any: ...
 
 
 __all__ = ["ToolContext"]

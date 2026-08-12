@@ -83,19 +83,39 @@ class RecordingCtx:
     The queue is a SEPARATE keyword on purpose: a list is a perfectly ordinary
     response body (most list_* tools return one), so overloading the positional
     argument would silently turn a returned array into a per-call queue.
+
+    ``raw_responses`` feeds ``request_raw``, the byte-preserving path the
+    attachment tools use. It has no default answer: an unexpected raw call is a
+    test writing a request nobody scripted, which should fail loudly rather
+    than receive an empty dict that happens not to crash.
     """
 
-    def __init__(self, response: Any = None, *, responses: list[Any] | None = None) -> None:
+    def __init__(
+        self,
+        response: Any = None,
+        *,
+        responses: list[Any] | None = None,
+        raw_responses: list[Any] | None = None,
+    ) -> None:
         self.settings = None
         self.calls: list[dict[str, Any]] = []
         self._queue = list(responses) if responses is not None else None
         self._response = {} if response is None else response
+        self._raw_queue = list(raw_responses) if raw_responses is not None else []
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
         self.calls.append({"method": method, "path": path, **kwargs})
         if self._queue is not None:
             return self._queue.pop(0) if self._queue else {}
         return self._response
+
+    async def request_raw(self, method: str, path: str, **kwargs: Any) -> Any:
+        self.calls.append({"method": method, "path": path, **kwargs})
+        if not self._raw_queue:
+            raise AssertionError(
+                f"unexpected request_raw({method} {path}) - pass raw_responses= to RecordingCtx"
+            )
+        return self._raw_queue.pop(0)
 
     @property
     def last(self) -> dict[str, Any]:
