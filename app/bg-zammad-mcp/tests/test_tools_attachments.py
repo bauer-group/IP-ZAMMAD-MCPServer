@@ -259,6 +259,7 @@ async def test_download_fetches_metadata_then_the_file() -> None:
         "content_kind": "text",
         "extraction": {"status": "not_applicable", "tool": None, "reason": None},
         "decoding": {"charset": "utf-8", "lossy": False},
+        "truncated": False,
     }
 
 
@@ -286,7 +287,7 @@ async def test_download_refuses_an_oversized_file_before_transferring_it() -> No
             )
         ]
     )
-    with pytest.raises(Exception, match="over the 5242880 byte limit"):
+    with pytest.raises(Exception, match="byte transfer limit"):
         await _call(
             mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
         )
@@ -304,17 +305,17 @@ async def test_download_measures_the_payload_when_zammad_reports_no_size() -> No
 
 
 async def test_download_enforces_the_limit_after_the_fact_when_size_was_unknown() -> None:
-    mcp, _ = _build_raw(
+    """stores.size is nullable, so the pre-flight guard cannot always run."""
+    ctx = ScriptedCtx(
         [_one("unknown-size.txt", "text/plain", None)], [_raw(b"x" * 50, "text/plain")]
     )
+    ctx.settings = type("S", (), {"zammad_attachment_max_transfer_bytes": 10})()
+    mcp: FastMCP = FastMCP("test-attachments")
+    attachments.register(mcp, ctx)
+
     with pytest.raises(Exception, match="is 50 bytes"):
         await _call(
-            mcp,
-            "download_ticket_attachment",
-            ticket_id=5,
-            article_id=42,
-            attachment_id=7,
-            max_bytes=10,
+            mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
         )
 
 
@@ -334,27 +335,24 @@ async def test_a_json_attachment_arrives_as_its_literal_file_text() -> None:
     assert '"ok": true' in content
 
 
-async def test_max_bytes_ceiling_and_default_come_from_settings() -> None:
-    """Without a ceiling the model just retries the size guard with a bigger
-    number; hardcoding it put the knob out of an operator's reach."""
-
+async def test_the_transfer_limit_comes_from_settings_and_is_not_a_parameter() -> None:
+    """One operator-set transfer limit, shared with the upload path. It is not
+    a per-call knob: an override that can only go down is noise once the
+    response guards bound what the answer actually costs."""
     ctx = ScriptedCtx([])
-    # RecordingCtx.__init__ sets self.settings = None, so a class attribute
-    # would be shadowed - assign on the instance.
-    ctx.settings = type(
-        "S",
-        (),
-        {
-            "zammad_attachment_max_read_bytes": 1234,
-            "zammad_attachment_read_ceiling_bytes": 5678,
-        },
-    )()
+    ctx.settings = type("S", (), {"zammad_attachment_max_transfer_bytes": 64})()
 
     mcp: FastMCP = FastMCP("test-attachments")
     attachments.register(mcp, ctx)
     schema = (await _tools(mcp))["download_ticket_attachment"].parameters or {}
-    assert schema["properties"]["max_bytes"]["maximum"] == 5678
-    assert schema["properties"]["max_bytes"]["default"] == 1234
+    assert "max_bytes" not in schema["properties"]
+
+    ctx._queue = [_one("gross.bin", "application/octet-stream", 128)]
+    with pytest.raises(Exception, match="byte transfer limit"):
+        await _call(
+            mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+        )
+    assert len(ctx.calls) == 1, "the file must never be requested"
 
 
 # ── what the read path returns now ───────────────────────────────────────────
@@ -582,3 +580,120 @@ async def test_mode_raw_skips_extraction_entirely() -> None:
     )
     assert result.structured_content["extraction"]["status"] == "not_applicable"
     assert result.structured_content["content_kind"] == "blob"
+
+
+# ── the response guards: the file size is not what costs ─────────────────────
+
+
+def _with_limits(responses: list[Any], raw: list[Any], **limits: Any) -> FastMCP:
+    ctx = ScriptedCtx(responses, raw)
+    ctx.settings = type("S", (), limits)()
+    mcp: FastMCP = FastMCP("test-attachments")
+    attachments.register(mcp, ctx)
+    return mcp
+
+
+async def test_a_long_text_body_is_truncated_and_says_so() -> None:
+    """The case a file-size guard lets through: 4 MB of log is well under any
+    transfer limit and still costs about a million tokens to return."""
+    body = b"x" * 5000
+    mcp = _with_limits(
+        [_one("riesig.log", "text/plain", len(body))],
+        [_raw(body, "text/plain")],
+        zammad_attachment_max_text_bytes=1000,
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    sc = result.structured_content
+    assert len(sc["content"]) == 1000
+    assert sc["truncated"] is True
+    assert sc["full_text_bytes"] == 5000
+    assert sc["size_bytes"] == 5000, "the real file size is still reported"
+
+
+async def test_truncation_does_not_cut_a_character_in_half() -> None:
+    body = "ü" * 100  # two bytes each
+    mcp = _with_limits(
+        [_one("umlaute.txt", "text/plain", 200)],
+        [_raw(body.encode(), "text/plain")],
+        zammad_attachment_max_text_bytes=51,  # lands mid-character
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    content = result.structured_content["content"]
+    assert content == "ü" * 25, "the seam must not produce a replacement character"
+    assert "\ufffd" not in content
+
+
+async def test_a_short_text_body_is_not_flagged() -> None:
+    mcp, _ = _build_raw([_article()], [_raw(b"kurz", "text/plain")])
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    assert result.structured_content["truncated"] is False
+    assert "full_text_bytes" not in result.structured_content
+
+
+async def test_extracted_text_is_truncated_too() -> None:
+    pytest.importorskip("defusedxml")
+    docx = _docx_bytes("A" * 3000)
+    mcp = _with_limits(
+        [_one("lang.docx", "application/octet-stream", len(docx))],
+        [_raw(docx, "application/octet-stream")],
+        zammad_attachment_max_text_bytes=500,
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    sc = result.structured_content
+    assert sc["content_kind"] == "extracted_text"
+    assert len(sc["content"]) == 500
+    assert sc["truncated"] is True
+
+
+async def test_a_large_binary_comes_back_as_metadata_only() -> None:
+    """A base64 blob nothing can read is pure cost - it inflates 4/3 on the way
+    out and no model consumes it."""
+    blob = b"\x00\x01\x02" * 2000
+    mcp = _with_limits(
+        [_one("gross.bin", "application/octet-stream", len(blob))],
+        [_raw(blob, "application/octet-stream")],
+        zammad_attachment_max_blob_bytes=1000,
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    sc = result.structured_content
+    assert sc["content_kind"] == "metadata_only"
+    assert not [b for b in result.content if isinstance(b, EmbeddedResource)]
+    assert sc["size_bytes"] == 6000
+    assert "open it in Zammad" in result.content[0].text
+
+
+async def test_a_pdf_larger_than_the_blob_limit_is_still_read_as_text() -> None:
+    """The whole point of splitting the guards: extraction output is small even
+    when the file is not, so a big PDF is cheap to return."""
+    pypdf = pytest.importorskip("pypdf")
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    import io as _io
+
+    buf = _io.BytesIO()
+    writer.write(buf)
+    pdf = buf.getvalue()
+
+    mcp = _with_limits(
+        [_one("angebot.pdf", "application/pdf", len(pdf))],
+        [_raw(pdf, "application/pdf")],
+        zammad_attachment_max_blob_bytes=10,  # far below the file size
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    sc = result.structured_content
+    assert sc["content_kind"] == "extracted_text", (
+        "extraction happens before the blob guard - the blob limit must not "
+        "block a file whose TEXT is small"
+    )

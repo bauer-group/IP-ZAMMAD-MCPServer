@@ -188,24 +188,25 @@ def test_client_redirect_allowlist_parses_a_csv(base_zammad_env) -> None:  # typ
 
 def test_attachment_limits_have_the_documented_defaults(base_none_env) -> None:  # type: ignore[no-untyped-def]
     settings = Settings()
-    assert settings.zammad_attachment_max_read_bytes == 5 * 1024 * 1024
-    assert settings.zammad_attachment_read_ceiling_bytes == 20 * 1024 * 1024
-    assert settings.zammad_attachment_upload_enabled is True
-    assert settings.zammad_attachment_max_upload_bytes == 10 * 1024 * 1024
+    assert settings.zammad_attachment_max_transfer_bytes == 10 * 1024 * 1024
     assert settings.zammad_attachment_max_article_bytes == 25 * 1024 * 1024
+    assert settings.zammad_attachment_max_text_bytes == 256 * 1024
+    assert settings.zammad_attachment_max_blob_bytes == 2 * 1024 * 1024
+    assert settings.zammad_attachment_upload_enabled is True
 
 
-def test_read_ceiling_below_the_read_default_is_rejected(base_none_env) -> None:  # type: ignore[no-untyped-def]
-    """A ceiling under the default puts the default above its own maximum, so
-    every read fails - better caught at boot than per call."""
-    base_none_env.setenv("ZAMMAD_ATTACHMENT_MAX_READ_BYTES", str(20 * 1024 * 1024))
-    base_none_env.setenv("ZAMMAD_ATTACHMENT_READ_CEILING_BYTES", str(5 * 1024 * 1024))
-    with pytest.raises(ValueError, match="ZAMMAD_ATTACHMENT_READ_CEILING_BYTES"):
-        Settings()
+def test_one_transfer_limit_covers_both_directions(base_none_env) -> None:  # type: ignore[no-untyped-def]
+    """Two limits could only ever disagree, and the state they disagreed into -
+    attach 10 MiB, refuse to read it back at 5 MiB - is the one nobody wants."""
+    base_none_env.setenv("ZAMMAD_ATTACHMENT_MAX_TRANSFER_BYTES", str(7 * 1024 * 1024))
+    settings = Settings()
+    assert settings.zammad_attachment_max_transfer_bytes == 7 * 1024 * 1024
+    assert not hasattr(settings, "zammad_attachment_max_read_bytes")
+    assert not hasattr(settings, "zammad_attachment_max_upload_bytes")
 
 
-def test_article_limit_below_the_per_file_limit_is_rejected(base_none_env) -> None:  # type: ignore[no-untyped-def]
-    base_none_env.setenv("ZAMMAD_ATTACHMENT_MAX_UPLOAD_BYTES", str(20 * 1024 * 1024))
+def test_article_limit_below_the_transfer_limit_is_rejected(base_none_env) -> None:  # type: ignore[no-untyped-def]
+    base_none_env.setenv("ZAMMAD_ATTACHMENT_MAX_TRANSFER_BYTES", str(20 * 1024 * 1024))
     base_none_env.setenv("ZAMMAD_ATTACHMENT_MAX_ARTICLE_BYTES", str(5 * 1024 * 1024))
     with pytest.raises(ValueError, match="ZAMMAD_ATTACHMENT_MAX_ARTICLE_BYTES"):
         Settings()

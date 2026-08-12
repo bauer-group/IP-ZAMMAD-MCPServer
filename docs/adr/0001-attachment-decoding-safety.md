@@ -108,6 +108,24 @@ timeout is the backstop.
   is not either: a `.zip` containing an `.exe` passes both. Both are tripwires
   against the obvious accident and must never be described as more.
 
+## Postscript: the limits were guarding the wrong quantity
+
+The first version shipped a read limit and an upload limit that could disagree
+- and did: 5 MiB for reading, 10 MiB for uploading, so the server could attach
+a file it then refused to read back. Corrected on the same day.
+
+The fix was not to align the two numbers. The read guard measured the FILE, and
+what costs is the RESPONSE. A 9 MB PDF extracting to 20 KB of text was refused
+while a 4 MB log file passed and then returned four megabytes of text - roughly
+a million tokens. The guard blocked the free case and admitted the expensive
+one.
+
+There are now two limits on two quantities: one TRANSFER limit shared by both
+directions (a second one could only ever disagree with the first), and RESPONSE
+limits on what is actually returned - text truncated and flagged, oversized
+binaries reduced to metadata. The per-call `max_bytes` parameter is gone: an
+override that can only go down is noise once the response is bounded.
+
 ## Related
 
 - Design: `docs/superpowers/specs/2026-08-12-ticket-attachment-support-design.md`

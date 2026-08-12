@@ -61,6 +61,22 @@ losing the stripper must not lose the file. A binary document that fails
 degrades to a blob carrying the reason, so the model can say why instead of
 speculating over an empty string.
 
+Two limits, on two different quantities
+---------------------------------------
+TRANSFER bounds bytes on the wire and is checked from the article's metadata,
+before anything is fetched - that is what lets a 200 MB file be refused without
+moving it. It is deliberately ONE setting shared with the upload path: two
+numbers could only ever disagree, and the state they disagreed into (upload
+10 MiB, refuse to read it back at 5 MiB) is the one nobody wants.
+
+RESPONSE bounds what actually reaches the caller, which is a different quantity.
+A 9 MB PDF may extract to 20 KB of text and is cheap to return; a 4 MB log file
+passes every file-size guard and then costs roughly a million tokens. Guarding
+the file size alone lets the expensive case through and blocks the free one.
+Text over the limit is truncated and flagged ``truncated``; a binary over the
+blob limit comes back as metadata only, because a base64 payload nothing can
+read is pure cost.
+
 The bytes reach us through ``ctx.request_raw``. The ordinary ``ctx.request``
 decodes a 2xx body as JSON or as httpx's ``Response.text`` - a UTF-8 decode
 with errors='replace' - which turns every non-UTF-8 byte into U+FFFD
@@ -93,8 +109,9 @@ if TYPE_CHECKING:
 
 # Used when the context carries no settings - the recording test harness, and
 # any future caller that constructs the tools directly.
-FALLBACK_MAX_READ_BYTES = 5 * 1024 * 1024
-FALLBACK_READ_CEILING_BYTES = 20 * 1024 * 1024
+FALLBACK_MAX_TRANSFER_BYTES = 10 * 1024 * 1024
+FALLBACK_MAX_TEXT_BYTES = 256 * 1024
+FALLBACK_MAX_BLOB_BYTES = 2 * 1024 * 1024
 
 READ_MODES = ("auto", "text", "raw")
 
@@ -109,15 +126,9 @@ def _as_int(raw: Any) -> int | None:
         return None
 
 
-def _read_limits(ctx: ToolContext) -> tuple[int, int]:
-    """(default max_bytes, hard ceiling) from settings, with safe fallbacks."""
-    settings = getattr(ctx, "settings", None)
-    default = getattr(settings, "zammad_attachment_max_read_bytes", None)
-    ceiling = getattr(settings, "zammad_attachment_read_ceiling_bytes", None)
-    return (
-        default if isinstance(default, int) else FALLBACK_MAX_READ_BYTES,
-        ceiling if isinstance(ceiling, int) else FALLBACK_READ_CEILING_BYTES,
-    )
+def _limit(ctx: ToolContext, name: str, fallback: int) -> int:
+    value = getattr(getattr(ctx, "settings", None), name, None)
+    return value if isinstance(value, int) else fallback
 
 
 def _charset_of(response: Any) -> str | None:
@@ -158,11 +169,53 @@ def _find_attachment(article: Any, attachment_id: int) -> dict[str, Any] | None:
     return None
 
 
+def _truncate(text: str, max_text_bytes: int) -> tuple[str, bool, int]:
+    """Cut a text body to the response limit. Returns (text, truncated, full_bytes).
+
+    Encoding first and slicing bytes, then decoding with errors='ignore', so the
+    cut cannot land inside a multi-byte character and produce mojibake at the
+    seam. Truncation is always REPORTED - a silently shortened document reads
+    exactly like a complete one, which is the failure mode worth avoiding.
+    """
+    encoded = text.encode("utf-8")
+    if len(encoded) <= max_text_bytes:
+        return text, False, len(encoded)
+    return encoded[:max_text_bytes].decode("utf-8", "ignore"), True, len(encoded)
+
+
 def _blob_result(
-    base: dict[str, Any], data: bytes, detection: media.Detection, size: int
+    base: dict[str, Any],
+    data: bytes,
+    detection: media.Detection,
+    size: int,
+    max_blob_bytes: int,
 ) -> ToolResult:
-    """Metadata plus the untouched bytes, for anything that is not text."""
+    """Metadata plus the untouched bytes, for anything that is not text.
+
+    Above ``max_blob_bytes`` the bytes are withheld. A base64 blob larger than
+    the caller can do anything with is pure cost: it inflates by 4/3 on the way
+    out and no model reads it. Metadata plus a sentence is more useful.
+    """
     base["content_kind"] = "blob"
+    reason = base["extraction"].get("reason")
+    detail = (
+        f"text extraction failed: {reason}"
+        if reason
+        else "its content could not be turned into text."
+    )
+
+    if size > max_blob_bytes:
+        base["content_kind"] = "metadata_only"
+        summary = (
+            f"{base['filename']} ({detection.mime_type}, {size} bytes) is over the "
+            f"{max_blob_bytes} byte limit for returning raw bytes, so only its "
+            f"metadata is here - {detail} Tell the user the file name and type "
+            "and let them open it in Zammad."
+        )
+        return ToolResult(
+            content=[TextContent(type="text", text=summary)], structured_content=base
+        )
+
     resource = BlobResourceContents(
         uri=AnyUrl(
             f"zammad://ticket/{base['ticket_id']}/article/{base['article_id']}"
@@ -171,14 +224,9 @@ def _blob_result(
         mimeType=detection.mime_type,
         blob=base64.b64encode(data).decode(),
     )
-    reason = base["extraction"].get("reason")
     summary = (
-        f"{base['filename']} ({detection.mime_type}, {size} bytes) returned as raw bytes; "
-        + (
-            f"text extraction failed: {reason}"
-            if reason
-            else "its content could not be turned into text."
-        )
+        f"{base['filename']} ({detection.mime_type}, {size} bytes) returned as raw "
+        f"bytes; {detail}"
     )
     return ToolResult(
         content=[
@@ -190,13 +238,17 @@ def _blob_result(
 
 
 def _text_result(
-    base: dict[str, Any], data: bytes, charset: str | None
+    base: dict[str, Any], data: bytes, charset: str | None, max_text_bytes: int
 ) -> ToolResult:
     """A decoded text body, with the charset that worked stated openly."""
-    text, used, lossy = media.decode_text(data, charset=charset)
+    decoded, used, lossy = media.decode_text(data, charset=charset)
+    text, truncated, full_bytes = _truncate(decoded, max_text_bytes)
     base["content"] = text
     base["content_kind"] = "text"
     base["decoding"] = {"charset": used, "lossy": lossy}
+    base["truncated"] = truncated
+    if truncated:
+        base["full_text_bytes"] = full_bytes
     return ToolResult(
         content=[TextContent(type="text", text=text)], structured_content=base
     )
@@ -214,6 +266,8 @@ async def _build_result(
     detection: media.Detection,
     charset: str | None,
     mode: str,
+    max_text_bytes: int,
+    max_blob_bytes: int,
 ) -> ToolResult:
     """Route bytes onto the right MCP content block and describe what happened."""
     kind = detection.kind
@@ -236,6 +290,7 @@ async def _build_result(
         "content_kind": kind.value,
         "extraction": dict(_NO_EXTRACTION),
         "decoding": None,
+        "truncated": False,
     }
 
     if kind is media.Kind.IMAGE:
@@ -254,7 +309,7 @@ async def _build_result(
         )
 
     if kind is media.Kind.TEXT:
-        return _text_result(base, data, charset)
+        return _text_result(base, data, charset, max_text_bytes)
 
     if kind is media.Kind.DOCUMENT:
         result = await extract.extract(data, mime_type=detection.mime_type)
@@ -264,10 +319,14 @@ async def _build_result(
             "reason": result.reason,
         }
         if result.status in {"ok", "partial"}:
-            base["content"] = result.text
+            text, truncated, full_bytes = _truncate(result.text or "", max_text_bytes)
+            base["content"] = text
             base["content_kind"] = "extracted_text"
+            base["truncated"] = truncated
+            if truncated:
+                base["full_text_bytes"] = full_bytes
             return ToolResult(
-                content=[TextContent(type="text", text=result.text or "")],
+                content=[TextContent(type="text", text=text)],
                 structured_content=base,
             )
         if detection.textual:
@@ -275,13 +334,17 @@ async def _build_result(
             # lose the file: the raw text is degraded but perfectly readable,
             # and a blob here would reintroduce exactly the dead end this
             # feature exists to remove.
-            return _text_result(base, data, charset)
+            return _text_result(base, data, charset, max_text_bytes)
 
-    return _blob_result(base, data, detection, size)
+    return _blob_result(base, data, detection, size, max_blob_bytes)
 
 
 def register(mcp: FastMCP, ctx: ToolContext) -> int:
-    default_max_bytes, ceiling_bytes = _read_limits(ctx)
+    max_transfer_bytes = _limit(
+        ctx, "zammad_attachment_max_transfer_bytes", FALLBACK_MAX_TRANSFER_BYTES
+    )
+    max_text_bytes = _limit(ctx, "zammad_attachment_max_text_bytes", FALLBACK_MAX_TEXT_BYTES)
+    max_blob_bytes = _limit(ctx, "zammad_attachment_max_blob_bytes", FALLBACK_MAX_BLOB_BYTES)
 
     @mcp.tool(
         name="list_ticket_attachments",
@@ -313,14 +376,27 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         # Synthesised from the whole thread, which Zammad never paginates.
         return envelope(rows, ticket_id=ticket_id)
 
-    # NOT decorated: the max_bytes ceiling is an operator setting, and this
-    # module runs under `from __future__ import annotations`, so an
-    # `Annotated[..., Field(le=ceiling_bytes)]` written inline would stay a
-    # string and be evaluated later against the MODULE globals - where a local
-    # of register() does not exist (NameError at schema-build time). The
-    # annotation is therefore patched in with the real object below, and the
-    # tool is registered by an explicit decorator call. Defaults are unaffected:
-    # they are ordinary runtime values.
+    @mcp.tool(
+        name="download_ticket_attachment",
+        description=(
+            "Read the CONTENT of one ticket attachment. Call "
+            "`list_ticket_attachments` first to get a valid "
+            "`article_id` / `attachment_id` pair - guessing them returns 403, "
+            "because Zammad verifies that the attachment belongs to the "
+            "article and the article to the ticket. Images come back as "
+            "viewable images; text, PDF, Word and Excel files come back as "
+            "text; anything else comes back as metadata plus the raw bytes. "
+            "The file type is determined from the bytes themselves, so a file "
+            "mislabelled at upload is still read correctly. Set `mode` to "
+            "'text' to force a text decode or 'raw' for the untouched bytes. "
+            "A very long text body is truncated and the result says so; a very "
+            "large binary comes back as metadata only. Needs the same access "
+            "as reading the ticket."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=True, destructiveHint=False, openWorldHint=True
+        ),
+    )
     async def download_ticket_attachment(
         ticket_id: Annotated[int, Field(ge=1)],
         article_id: Annotated[
@@ -329,7 +405,6 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         attachment_id: Annotated[
             int, Field(ge=1, description="ID of the file within that article")
         ],
-        max_bytes: int = default_max_bytes,
         mode: Annotated[
             str,
             Field(
@@ -359,11 +434,12 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         declared = media.mime_from_preferences(attachment.get("preferences"))
         size = _as_int(attachment.get("size"))
 
-        if size is not None and size > max_bytes:
+        if size is not None and size > max_transfer_bytes:
             raise ToolError(
-                f"Attachment {filename!r} is {size} bytes, over the {max_bytes} byte "
-                f"limit. Raise max_bytes if the content is really needed (hard "
-                f"ceiling {ceiling_bytes})."
+                f"Attachment {filename!r} is {size} bytes, over the "
+                f"{max_transfer_bytes} byte transfer limit "
+                "(ZAMMAD_ATTACHMENT_MAX_TRANSFER_BYTES). Tell the user the file "
+                "name and size and let them open it in Zammad."
             )
 
         response = await ctx.request_raw(
@@ -374,11 +450,11 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             # stores.size is nullable, so the pre-flight guard could not run -
             # measure what actually arrived instead.
             size = len(data)
-            if size > max_bytes:
+            if size > max_transfer_bytes:
                 raise ToolError(
-                    f"Attachment {filename!r} is {size} bytes, over the {max_bytes} "
-                    "byte limit. Zammad reported no size for it, so this could only "
-                    "be checked after the transfer."
+                    f"Attachment {filename!r} is {size} bytes, over the "
+                    f"{max_transfer_bytes} byte transfer limit. Zammad reported no "
+                    "size for it, so this could only be checked after the transfer."
                 )
 
         detection = media.detect(data, filename=filename, declared=declared)
@@ -393,38 +469,8 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             detection=detection,
             charset=_charset_of(response),
             mode=mode,
+            max_text_bytes=max_text_bytes,
+            max_blob_bytes=max_blob_bytes,
         )
-
-    download_ticket_attachment.__annotations__["max_bytes"] = Annotated[
-        int,
-        Field(
-            ge=1,
-            le=ceiling_bytes,
-            description=(
-                f"Refuse anything larger (default {default_max_bytes}, "
-                f"ceiling {ceiling_bytes})"
-            ),
-        ),
-    ]
-    mcp.tool(
-        name="download_ticket_attachment",
-        description=(
-            "Read the CONTENT of one ticket attachment. Call "
-            "`list_ticket_attachments` first to get a valid "
-            "`article_id` / `attachment_id` pair - guessing them returns 403, "
-            "because Zammad verifies that the attachment belongs to the "
-            "article and the article to the ticket. Images come back as "
-            "viewable images; text files come back as text; anything else "
-            "comes back as metadata plus the raw bytes. The file type is "
-            "determined from the bytes themselves, so a file mislabelled at "
-            "upload is still read correctly. Set `mode` to 'text' to force a "
-            "text decode or 'raw' for the untouched bytes. Files larger than "
-            "`max_bytes` are refused before any data is transferred. Needs the "
-            "same access as reading the ticket."
-        ),
-        annotations=ToolAnnotations(
-            readOnlyHint=True, destructiveHint=False, openWorldHint=True
-        ),
-    )(download_ticket_attachment)
 
     return 2

@@ -36,7 +36,11 @@ if TYPE_CHECKING:
     from .tools import ToolContext
 
 # Used when the context carries no settings (the recording test harness).
-FALLBACK_MAX_UPLOAD_BYTES: Final = 10 * 1024 * 1024
+# The per-file limit is the SAME setting the read path uses: one transfer limit
+# for both directions, because two could only ever disagree - and the state they
+# disagreed into (attach 10 MiB, refuse to read it back at 5 MiB) is the one
+# nobody wants.
+FALLBACK_MAX_TRANSFER_BYTES: Final = 10 * 1024 * 1024
 FALLBACK_MAX_ARTICLE_BYTES: Final = 25 * 1024 * 1024
 
 # NOT virus scanning, and it must never be described as one: a .zip containing
@@ -143,10 +147,10 @@ class AttachmentInput(BaseModel):
 
 def _limits(ctx: ToolContext) -> tuple[int, int]:
     settings = getattr(ctx, "settings", None)
-    per_file = getattr(settings, "zammad_attachment_max_upload_bytes", None)
+    per_file = getattr(settings, "zammad_attachment_max_transfer_bytes", None)
     per_article = getattr(settings, "zammad_attachment_max_article_bytes", None)
     return (
-        per_file if isinstance(per_file, int) else FALLBACK_MAX_UPLOAD_BYTES,
+        per_file if isinstance(per_file, int) else FALLBACK_MAX_TRANSFER_BYTES,
         per_article if isinstance(per_article, int) else FALLBACK_MAX_ARTICLE_BYTES,
     )
 
@@ -242,8 +246,8 @@ async def build_attachment_payload(
         filename, data, mime = await _resolve(ctx, item)
         if len(data) > per_file:
             raise ToolError(
-                f"Attachment {filename!r} is {len(data)} bytes, over the {per_file} byte "
-                "per-file limit for uploads."
+                f"Attachment {filename!r} is {len(data)} bytes, over the {per_file} "
+                "byte transfer limit (ZAMMAD_ATTACHMENT_MAX_TRANSFER_BYTES)."
             )
         _reject_executables(filename, data)
         total += len(data)
@@ -268,7 +272,7 @@ __all__ = [
     "DENIED_EXTENSIONS",
     "DENIED_MAGIC",
     "FALLBACK_MAX_ARTICLE_BYTES",
-    "FALLBACK_MAX_UPLOAD_BYTES",
+    "FALLBACK_MAX_TRANSFER_BYTES",
     "MAX_ATTACHMENTS_PER_ARTICLE",
     "AttachmentInput",
     "CopyRef",

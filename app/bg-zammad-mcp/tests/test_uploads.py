@@ -177,7 +177,7 @@ async def test_no_attachments_produces_no_payload_key() -> None:
 
 
 async def test_a_file_over_the_per_file_limit_is_refused() -> None:
-    ctx = Ctx(zammad_attachment_max_upload_bytes=10, zammad_attachment_max_article_bytes=100)
+    ctx = Ctx(zammad_attachment_max_transfer_bytes=10, zammad_attachment_max_article_bytes=100)
     with pytest.raises(ToolError, match="over the 10 byte"):
         await uploads.build_attachment_payload(
             ctx, [AttachmentInput(filename="a.txt", text="x" * 20)]
@@ -185,7 +185,7 @@ async def test_a_file_over_the_per_file_limit_is_refused() -> None:
 
 
 async def test_the_article_total_is_enforced_across_files() -> None:
-    ctx = Ctx(zammad_attachment_max_upload_bytes=100, zammad_attachment_max_article_bytes=30)
+    ctx = Ctx(zammad_attachment_max_transfer_bytes=100, zammad_attachment_max_article_bytes=30)
     with pytest.raises(ToolError, match="together"):
         await uploads.build_attachment_payload(
             ctx,
