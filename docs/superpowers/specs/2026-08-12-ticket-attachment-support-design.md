@@ -174,7 +174,7 @@ complaint.
 | --- | --- | --- |
 | PDF | `pypdf` | Writing a PDF text extractor is not a serious option |
 | XLSX | `openpyxl` (`read_only=True`, `data_only=True`) | Shared strings, inline strings and cached formula values are fiddly enough that the library wins. Uses `ElementTree` internally |
-| DOCX | stdlib `zipfile` + `xml.etree.ElementTree` | See the decision record below |
+| DOCX | stdlib `zipfile` + `defusedxml` | See the decision record below |
 | RTF | `striprtf` | Small, pure Python, solves the triggering case |
 
 All four ship as an optional extra, `bg-zammad-mcp[documents]`, installed by the
@@ -198,8 +198,11 @@ code. The obvious choice for DOCX is `python-docx`.
    `file://` targets is a local-file-read vector. Measured on this repository's
    runtime (CPython 3.14.3), `xml.etree.ElementTree` refuses external entities
    outright — `<!DOCTYPE r [<!ENTITY x SYSTEM "file:///etc/hostname">]><r>&x;</r>`
-   raises `ParseError: undefined entity` — so the whole vector disappears with
-   the dependency.
+   raises `ParseError: undefined entity` — so the file-read vector disappears
+   with the dependency. It does *not* close the denial-of-service one: the same
+   measurement showed internal entities are expanded. Parsing therefore goes
+   through `defusedxml` rather than `ElementTree` directly, which refuses both
+   forms at the parser.
 2. *Build.* The production image is `python:3.14-alpine`. musl has no manylinux
    wheels, so `lxml` would be compiled from source at image-build time. `pypdf`,
    `openpyxl` and `striprtf` are pure Python and install cleanly there.
@@ -221,12 +224,15 @@ ADR and establishes `docs/adr/` as the location for further ones.
 
 The parsers see hostile bytes, so they sit behind four barriers:
 
-1. **No DTD.** Any XML member containing a `<!DOCTYPE` declaration is rejected
-   before parsing. Measured behaviour: ElementTree does not resolve external
-   entities but *does* expand internal ones, which is the billion-laughs
-   building block. OOXML never legitimately contains a DTD, so rejecting it
-   costs nothing and removes the entire entity class structurally, rather than
-   relying on a claim about parser internals.
+1. **No DTD, no entity declarations.** XML is parsed through `defusedxml` with
+   `forbid_dtd=True`, so the parser refuses both. Measured on CPython 3.14.3,
+   plain `ElementTree` does not resolve external entities but *does* expand
+   internal ones — the billion-laughs building block; measured on defusedxml
+   0.7.1, both forms raise `EntitiesForbidden` and a bare DTD raises
+   `DTDForbidden`. Enforcing this in the parser rather than by scanning the
+   leading bytes matters: a byte-level check misses a declaration placed past
+   its window or encoded as UTF-16. A missing `defusedxml` is a refusal, never
+   a fall back to the stdlib parser.
 2. **ZIP ratio and absolute cap.** For DOCX and XLSX, the sum of
    `ZipInfo.file_size` is checked against `compress_size` and against an
    absolute ceiling before anything is read. A zip bomb is refused before the
