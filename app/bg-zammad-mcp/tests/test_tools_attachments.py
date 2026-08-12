@@ -16,11 +16,14 @@ the same ``ToolContext`` shape the real server implements.
 
 from __future__ import annotations
 
+import base64
 import re
 from typing import Any
 
+import httpx
 import pytest
 from fastmcp import FastMCP
+from mcp.types import EmbeddedResource, ImageContent
 
 from tests.test_tools_inventory import EXPECTED_TOOLS, RecordingCtx
 from zammad.tools import attachments
@@ -36,13 +39,19 @@ class ScriptedCtx(RecordingCtx):
     fixed response of the base harness cannot express.
     """
 
-    def __init__(self, responses: list[Any]) -> None:
+    def __init__(self, responses: list[Any], raw: list[Any] | None = None) -> None:
         super().__init__()
         self._queue = list(responses)
+        self._raw_queue = list(raw or [])
 
     async def request(self, method: str, path: str, **kwargs: Any) -> Any:
         self.calls.append({"method": method, "path": path, **kwargs})
         return self._queue.pop(0) if self._queue else {}
+
+    async def request_raw(self, method: str, path: str, **kwargs: Any) -> Any:
+        self.calls.append({"method": method, "path": path, **kwargs})
+        assert self._raw_queue, f"unexpected request_raw({method} {path})"
+        return self._raw_queue.pop(0)
 
 
 def _article(**overrides: Any) -> dict[str, Any]:
@@ -70,6 +79,36 @@ def _build(responses: list[Any]) -> tuple[FastMCP, ScriptedCtx]:
     ctx = ScriptedCtx(responses)
     attachments.register(mcp, ctx)
     return mcp, ctx
+
+
+def _raw(content: bytes, content_type: str) -> httpx.Response:
+    return httpx.Response(
+        status_code=200,
+        content=content,
+        headers={"content-type": content_type},
+        request=httpx.Request("GET", "https://zammad.example/x"),
+    )
+
+
+def _build_raw(responses: list[Any], raw: list[Any]) -> tuple[FastMCP, ScriptedCtx]:
+    mcp: FastMCP = FastMCP("test-attachments")
+    ctx = ScriptedCtx(responses, raw)
+    attachments.register(mcp, ctx)
+    return mcp, ctx
+
+
+def _one(filename: str, mime: str, size: int | None) -> dict[str, Any]:
+    """A one-attachment article, for the download tests."""
+    return _article(
+        attachments=[
+            {
+                "id": 7,
+                "filename": filename,
+                **({} if size is None else {"size": str(size)}),
+                "preferences": {"Content-Type": mime},
+            }
+        ]
+    )
 
 
 async def _tools(mcp: FastMCP) -> dict[str, Any]:
@@ -197,7 +236,7 @@ async def test_mime_type_is_read_from_any_of_the_four_preference_keys(
 
 
 async def test_download_fetches_metadata_then_the_file() -> None:
-    mcp, ctx = _build([_article(), "line one\nline two"])
+    mcp, ctx = _build_raw([_article()], [_raw(b"line one\nline two", "text/plain")])
     result = await _call(
         mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
     )
@@ -206,14 +245,20 @@ async def test_download_fetches_metadata_then_the_file() -> None:
         ("GET", "/ticket_articles/42"),
         ("GET", "/ticket_attachment/5/42/7"),
     ]
+    # Exhaustive on purpose: this is the published contract, and an added key
+    # is as much a change to it as a removed one.
     assert result.structured_content == {
         "ticket_id": 5,
         "article_id": 42,
         "attachment_id": 7,
         "filename": "log.txt",
         "mime_type": "text/plain",
+        "detected_mime_type": "text/plain",
         "size_bytes": 12,
         "content": "line one\nline two",
+        "content_kind": "text",
+        "extraction": {"status": "not_applicable", "tool": None, "reason": None},
+        "decoding": {"charset": "utf-8", "lossy": False},
     }
 
 
@@ -224,29 +269,6 @@ async def test_download_rejects_an_attachment_not_on_that_article() -> None:
             mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=99
         )
     assert len(ctx.calls) == 1, "must not guess at a download for an unknown attachment"
-
-
-async def test_download_refuses_a_binary_type_without_transferring_it() -> None:
-    """A PNG would arrive as U+FFFD soup, so it is refused from metadata alone."""
-    mcp, ctx = _build(
-        [
-            _article(
-                attachments=[
-                    {
-                        "id": 7,
-                        "filename": "screenshot.png",
-                        "size": "2048",
-                        "preferences": {"Content-Type": "image/png"},
-                    }
-                ]
-            )
-        ]
-    )
-    with pytest.raises(Exception, match="image/png, which is binary"):
-        await _call(
-            mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
-        )
-    assert len(ctx.calls) == 1, "the file must never be requested"
 
 
 async def test_download_refuses_an_oversized_file_before_transferring_it() -> None:
@@ -272,19 +294,8 @@ async def test_download_refuses_an_oversized_file_before_transferring_it() -> No
 
 
 async def test_download_measures_the_payload_when_zammad_reports_no_size() -> None:
-    mcp, _ = _build(
-        [
-            _article(
-                attachments=[
-                    {
-                        "id": 7,
-                        "filename": "unknown-size.txt",
-                        "preferences": {"Content-Type": "text/plain"},
-                    }
-                ]
-            ),
-            "abcde",
-        ]
+    mcp, _ = _build_raw(
+        [_one("unknown-size.txt", "text/plain", None)], [_raw(b"abcde", "text/plain")]
     )
     result = await _call(
         mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
@@ -293,21 +304,10 @@ async def test_download_measures_the_payload_when_zammad_reports_no_size() -> No
 
 
 async def test_download_enforces_the_limit_after_the_fact_when_size_was_unknown() -> None:
-    mcp, _ = _build(
-        [
-            _article(
-                attachments=[
-                    {
-                        "id": 7,
-                        "filename": "unknown-size.txt",
-                        "preferences": {"Content-Type": "text/plain"},
-                    }
-                ]
-            ),
-            "x" * 50,
-        ]
+    mcp, _ = _build_raw(
+        [_one("unknown-size.txt", "text/plain", None)], [_raw(b"x" * 50, "text/plain")]
     )
-    with pytest.raises(Exception, match="decoded to 50 bytes"):
+    with pytest.raises(Exception, match="is 50 bytes"):
         await _call(
             mcp,
             "download_ticket_attachment",
@@ -318,23 +318,13 @@ async def test_download_enforces_the_limit_after_the_fact_when_size_was_unknown(
         )
 
 
-async def test_download_reserialises_a_json_attachment_to_text() -> None:
-    """The context decodes by content type, so a .json file arrives parsed -
-    `content` must still be a string, not sometimes a dict."""
-    mcp, _ = _build(
-        [
-            _article(
-                attachments=[
-                    {
-                        "id": 7,
-                        "filename": "payload.json",
-                        "size": "20",
-                        "preferences": {"Content-Type": "application/json"},
-                    }
-                ]
-            ),
-            {"ok": True},
-        ]
+async def test_a_json_attachment_arrives_as_its_literal_file_text() -> None:
+    """The raw path no longer parses by content type, so a .json file is the
+    bytes on disk rather than a re-serialised dict."""
+    payload = b'{\n  "ok": true\n}'
+    mcp, _ = _build_raw(
+        [_one("payload.json", "application/json", len(payload))],
+        [_raw(payload, "application/json")],
     )
     result = await _call(
         mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
@@ -344,8 +334,145 @@ async def test_download_reserialises_a_json_attachment_to_text() -> None:
     assert '"ok": true' in content
 
 
-async def test_max_bytes_has_a_hard_ceiling_in_the_schema() -> None:
-    """Without it the model just retries the size guard with a bigger number."""
-    mcp, _ = _build([])
+async def test_max_bytes_ceiling_and_default_come_from_settings() -> None:
+    """Without a ceiling the model just retries the size guard with a bigger
+    number; hardcoding it put the knob out of an operator's reach."""
+
+    ctx = ScriptedCtx([])
+    # RecordingCtx.__init__ sets self.settings = None, so a class attribute
+    # would be shadowed - assign on the instance.
+    ctx.settings = type(
+        "S",
+        (),
+        {
+            "zammad_attachment_max_read_bytes": 1234,
+            "zammad_attachment_read_ceiling_bytes": 5678,
+        },
+    )()
+
+    mcp: FastMCP = FastMCP("test-attachments")
+    attachments.register(mcp, ctx)
     schema = (await _tools(mcp))["download_ticket_attachment"].parameters or {}
-    assert schema["properties"]["max_bytes"]["maximum"] == attachments.MAX_ALLOWED_BYTES
+    assert schema["properties"]["max_bytes"]["maximum"] == 5678
+    assert schema["properties"]["max_bytes"]["default"] == 1234
+
+
+# ── what the read path returns now ───────────────────────────────────────────
+
+PNG_BYTES = b"\x89PNG\r\n\x1a\n" + bytes(range(256))
+
+
+async def test_a_png_comes_back_as_an_image_block() -> None:
+    """The whole point: the model must be able to SEE a screenshot."""
+    mcp, _ = _build_raw(
+        [_one("screenshot.png", "image/png", len(PNG_BYTES))],
+        [_raw(PNG_BYTES, "image/png")],
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+
+    images = [block for block in result.content if isinstance(block, ImageContent)]
+    assert len(images) == 1
+    assert images[0].mimeType == "image/png"
+    assert base64.b64decode(images[0].data) == PNG_BYTES, "bytes must be intact"
+    assert result.structured_content["content_kind"] == "image"
+    assert result.structured_content["content"] is None
+
+
+async def test_rtf_mislabelled_as_msword_is_no_longer_refused() -> None:
+    """The regression that started this: refused as binary, while being text."""
+    rtf = rb"{\rtf1\ansi Technische Daten\par}"
+    mcp, _ = _build_raw(
+        [_one("Technische-Daten-Liquid-Liquid.rtf", "application/msword", len(rtf))],
+        [_raw(rtf, "application/msword")],
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    sc = result.structured_content
+    assert sc["mime_type"] == "application/msword", "the declared label is still reported"
+    assert sc["detected_mime_type"] == "application/rtf"
+    assert "Technische Daten" in sc["content"]
+
+
+async def test_an_unknown_binary_comes_back_as_a_blob_not_an_error() -> None:
+    blob = b"\x00\x01\x02\x03garbage\xff"
+    mcp, _ = _build_raw(
+        [_one("thing.bin", "application/octet-stream", len(blob))],
+        [_raw(blob, "application/octet-stream")],
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    embedded = [b for b in result.content if isinstance(b, EmbeddedResource)]
+    assert len(embedded) == 1
+    assert base64.b64decode(embedded[0].resource.blob) == blob
+    assert result.structured_content["content_kind"] == "blob"
+
+
+async def test_mode_raw_forces_a_blob_for_a_text_file() -> None:
+    mcp, _ = _build_raw([_article()], [_raw(b"line one", "text/plain")])
+    result = await _call(
+        mcp,
+        "download_ticket_attachment",
+        ticket_id=5,
+        article_id=42,
+        attachment_id=7,
+        mode="raw",
+    )
+    assert result.structured_content["content_kind"] == "blob"
+
+
+async def test_mode_text_forces_a_decode_for_an_unrecognised_file() -> None:
+    mcp, _ = _build_raw(
+        [_one("weird", "application/x-nonsense", 5)],
+        [_raw(b"hallo", "application/x-nonsense")],
+    )
+    result = await _call(
+        mcp,
+        "download_ticket_attachment",
+        ticket_id=5,
+        article_id=42,
+        attachment_id=7,
+        mode="text",
+    )
+    assert result.structured_content["content"] == "hallo"
+    assert result.structured_content["content_kind"] == "text"
+
+
+async def test_an_unknown_mode_is_refused_before_any_request() -> None:
+    mcp, ctx = _build_raw([], [])
+    with pytest.raises(Exception, match="mode must be one of"):
+        await _call(
+            mcp,
+            "download_ticket_attachment",
+            ticket_id=5,
+            article_id=42,
+            attachment_id=7,
+            mode="sideways",
+        )
+    assert ctx.calls == []
+
+
+async def test_a_lossy_decode_is_reported_as_such() -> None:
+    mcp, _ = _build_raw(
+        [_one("broken.txt", "text/plain", 3)], [_raw(b"\x81\x8d\x90", "text/plain")]
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    assert result.structured_content["decoding"]["lossy"] is True
+    assert result.structured_content["decoding"]["charset"] == "latin-1"
+
+
+async def test_the_charset_from_the_response_header_wins() -> None:
+    mcp, _ = _build_raw(
+        [_one("umlaut.txt", "text/plain", 6)],
+        [_raw("grüße".encode("cp1252"), "text/plain; charset=windows-1252")],
+    )
+    result = await _call(
+        mcp, "download_ticket_attachment", ticket_id=5, article_id=42, attachment_id=7
+    )
+    assert result.structured_content["content"] == "grüße"
+    assert result.structured_content["decoding"]["charset"] == "windows-1252"
