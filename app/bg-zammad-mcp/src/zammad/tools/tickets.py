@@ -51,7 +51,9 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from ..projection import TICKET_FIELDS, collection, parse_fields
+from ..uploads import AttachmentInput, build_attachment_payload
 from . import ToolContext
+from ._uploads_wiring import register_write_tool, uploads_enabled
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -358,26 +360,6 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         # silently win and return the plain ticket without any articles.
         return await ctx.request("GET", f"/tickets/{ticket_id}", params={"all": "true"})
 
-    @mcp.tool(
-        name="create_ticket",
-        description=(
-            "Create a new Zammad ticket. Requires `title`, `group` (group name "
-            "or ID), `customer` (customer e-mail or user ID), and an initial "
-            "`article_body`. The opening article is customer-visible by "
-            "default, matching how a ticket raised by a customer looks - pass "
-            "`article_visibility='internal'` for a ticket you are raising "
-            "purely for internal tracking. Every association accepts either a "
-            "name or an ID: `group`/`group_id`, `customer`/`customer_id`, "
-            "`state`/`state_id`, `priority`/`priority_id`. Pass one form or "
-            "the other, never both."
-        ),
-        annotations=ToolAnnotations(
-            readOnlyHint=False,
-            destructiveHint=False,  # additive: creates a new ticket
-            idempotentHint=False,
-            openWorldHint=True,
-        ),
-    )
     async def create_ticket(
         title: Annotated[str, Field(min_length=1, max_length=255)],
         group: Annotated[
@@ -467,6 +449,20 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 )
             ),
         ] = None,
+        attachments: Annotated[
+            list[AttachmentInput] | None,
+            Field(
+                default=None,
+                max_length=10,
+                description=(
+                    "Files to attach to the opening article. Each entry needs "
+                    "exactly one of: `text` (literal content - cheapest), "
+                    "`data_base64` (raw bytes), or `copy_from` (an attachment "
+                    "already in Zammad - costs no tokens and stays "
+                    "byte-identical)."
+                ),
+            ),
+        ] = None,
     ) -> Any:
         # Same merge order as update_ticket: custom attributes first, so an
         # explicit named argument always wins over a same-named custom field.
@@ -501,7 +497,38 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ):
             if value is not None:
                 payload[key] = value
+        attachment_payload = await build_attachment_payload(ctx, attachments)
+        if attachment_payload:
+            payload["article"]["attachments"] = attachment_payload
         return await ctx.request("POST", "/tickets", json=payload)
+
+    # Explicit registration: with uploads disabled the tool must be published
+    # without its attachments argument, and that decision has to be made before
+    # registration - see zammad.tools._uploads_wiring.
+    register_write_tool(
+        mcp,
+        create_ticket,
+        enabled=uploads_enabled(ctx),
+        name="create_ticket",
+        description=(
+            "Create a new Zammad ticket. Requires `title`, `group` (group name "
+            "or ID), `customer` (customer e-mail or user ID), and an initial "
+            "`article_body`. The opening article is customer-visible by "
+            "default, matching how a ticket raised by a customer looks - pass "
+            "`article_visibility='internal'` for a ticket you are raising "
+            "purely for internal tracking. Files passed in `attachments` hang "
+            "on that opening article. Every association accepts either a "
+            "name or an ID: `group`/`group_id`, `customer`/`customer_id`, "
+            "`state`/`state_id`, `priority`/`priority_id`. Pass one form or "
+            "the other, never both."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=False,
+            destructiveHint=False,  # additive: creates a new ticket
+            idempotentHint=False,
+            openWorldHint=True,
+        ),
+    )
 
     @mcp.tool(
         name="update_ticket",

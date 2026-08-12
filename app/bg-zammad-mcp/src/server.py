@@ -112,6 +112,12 @@ class _Tagging:
     after the fact: the decorator is public API, the private registry is not.
     Everything else passes straight through, so a tool module cannot tell the
     difference and needs no knowledge of tagging.
+
+    ``add_tool`` is wrapped as well as ``tool``. It is the second registration
+    path FastMCP offers, and a module that uses it — the attachment write tools
+    do, to publish a variant with an argument removed — would otherwise land
+    untagged, which is a silent hole in the grouping rather than a visible
+    error.
     """
 
     def __init__(self, mcp: Any, tags: set[str]) -> None:
@@ -124,6 +130,12 @@ class _Tagging:
     def tool(self, *args: Any, **kwargs: Any) -> Any:
         kwargs["tags"] = set(kwargs.get("tags") or set()) | self._tags
         return self._mcp.tool(*args, **kwargs)
+
+    def add_tool(self, tool: Any) -> Any:
+        tags = getattr(tool, "tags", None)
+        if tags is not None or hasattr(tool, "tags"):
+            tool.tags = set(tags or set()) | self._tags
+        return self._mcp.add_tool(tool)
 
 
 def register(mcp: Any, ctx: Any) -> int:

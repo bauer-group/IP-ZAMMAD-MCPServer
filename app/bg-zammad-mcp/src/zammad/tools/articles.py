@@ -25,6 +25,16 @@ So visibility is encoded in the tool name instead of in a parameter:
                              The customer never sees it.
 
 Neither tool exposes ``internal``, so the wrong combination is unreachable.
+
+Attachments ride along
+----------------------
+Zammad creates attachments only alongside an article - there is no endpoint
+that adds a file to an existing one. The ``attachments`` parameter therefore
+sits on these tools rather than in a tool of its own, which buys two things:
+visibility stays encoded in the tool NAME, so the trap above stays closed, and
+a reply with a file remains ONE article, so the customer receives one mail
+instead of two. ``ZAMMAD_ATTACHMENT_UPLOAD_ENABLED=false`` removes the
+parameter from the published schema entirely.
 """
 
 from __future__ import annotations
@@ -36,10 +46,20 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from ..projection import trim_articles
+from ..uploads import AttachmentInput, build_attachment_payload
 from . import ToolContext
+from ._uploads_wiring import register_write_tool, uploads_enabled
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
+ATTACHMENTS_DESCRIPTION = (
+    "Files to send with this message. Each entry needs exactly one of: "
+    "`text` (literal content - cheapest), `data_base64` (raw bytes), or "
+    "`copy_from` (an attachment already in Zammad, identified by "
+    "ticket_id / article_id / attachment_id - costs no tokens and stays "
+    "byte-identical)."
+)
 
 # Delivery channels a customer-visible article can use. 'note' is included
 # because a NON-internal note is a legitimate customer-visible entry; the
@@ -134,25 +154,6 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
     ) -> Any:
         return await ctx.request("GET", f"/ticket_article_plain/{article_id}")
 
-    @mcp.tool(
-        name="reply_to_customer",
-        description=(
-            "Send a CUSTOMER-VISIBLE reply on a ticket. Use this for anything "
-            "the customer should read. With the default `article_type='email'` "
-            "Zammad delivers the message by e-mail to the ticket's customer "
-            "(override the recipients with `to` / `cc`). Use "
-            "`article_type='phone'` to log what was said on a call, or "
-            "'note' for a visible note without delivery. This article is never "
-            "internal - for something the customer must NOT see, use "
-            "`add_internal_note` instead."
-        ),
-        annotations=ToolAnnotations(
-            readOnlyHint=False,
-            destructiveHint=False,  # additive: creates a new article, destroys nothing
-            idempotentHint=False,
-            openWorldHint=True,
-        ),
-    )
     async def reply_to_customer(
         ticket_id: Annotated[int, Field(ge=1)],
         body: Annotated[str, Field(min_length=1, description="The reply text")],
@@ -180,6 +181,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             str,
             Field(description="'text/plain' (default) or 'text/html'"),
         ] = "text/plain",
+        attachments: Annotated[
+            list[AttachmentInput] | None,
+            Field(default=None, max_length=10, description=ATTACHMENTS_DESCRIPTION),
+        ] = None,
     ) -> Any:
         if article_type not in CUSTOMER_FACING_TYPES:
             raise ToolError(
@@ -202,24 +207,11 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             payload["to"] = to
         if cc is not None:
             payload["cc"] = cc
+        attachment_payload = await build_attachment_payload(ctx, attachments)
+        if attachment_payload:
+            payload["attachments"] = attachment_payload
         return await ctx.request("POST", "/ticket_articles", json=payload)
 
-    @mcp.tool(
-        name="add_internal_note",
-        description=(
-            "Add an INTERNAL note to a ticket - visible to agents only, never "
-            "to the customer, and never delivered anywhere. Use it for "
-            "investigation notes, hand-over context, or anything you would not "
-            "want the customer to read. To write to the customer, use "
-            "`reply_to_customer`."
-        ),
-        annotations=ToolAnnotations(
-            readOnlyHint=False,
-            destructiveHint=False,  # additive
-            idempotentHint=False,
-            openWorldHint=True,
-        ),
-    )
     async def add_internal_note(
         ticket_id: Annotated[int, Field(ge=1)],
         body: Annotated[str, Field(min_length=1, description="The note text")],
@@ -228,6 +220,10 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             str,
             Field(description="'text/plain' (default) or 'text/html'"),
         ] = "text/plain",
+        attachments: Annotated[
+            list[AttachmentInput] | None,
+            Field(default=None, max_length=10, description=ATTACHMENTS_DESCRIPTION),
+        ] = None,
     ) -> Any:
         payload: dict[str, Any] = {
             "ticket_id": ticket_id,
@@ -238,6 +234,58 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         }
         if subject is not None:
             payload["subject"] = subject
+        attachment_payload = await build_attachment_payload(ctx, attachments)
+        if attachment_payload:
+            payload["attachments"] = attachment_payload
         return await ctx.request("POST", "/ticket_articles", json=payload)
+
+    # Registered explicitly rather than by decorator: when uploads are disabled
+    # the tool has to be published WITHOUT its attachments argument, and that
+    # decision has to be made before registration - every tool lookup on
+    # FastMCP's provider is async, and this function is not.
+    enabled = uploads_enabled(ctx)
+    register_write_tool(
+        mcp,
+        reply_to_customer,
+        enabled=enabled,
+        name="reply_to_customer",
+        description=(
+            "Send a CUSTOMER-VISIBLE reply on a ticket. Use this for anything "
+            "the customer should read. With the default `article_type='email'` "
+            "Zammad delivers the message by e-mail to the ticket's customer "
+            "(override the recipients with `to` / `cc`). Use "
+            "`article_type='phone'` to log what was said on a call, or "
+            "'note' for a visible note without delivery. Files passed in "
+            "`attachments` travel in this same article, so the customer "
+            "receives one message rather than two. This article is never "
+            "internal - for something the customer must NOT see, use "
+            "`add_internal_note` instead."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=False,
+            destructiveHint=False,  # additive: creates a new article, destroys nothing
+            idempotentHint=False,
+            openWorldHint=True,
+        ),
+    )
+    register_write_tool(
+        mcp,
+        add_internal_note,
+        enabled=enabled,
+        name="add_internal_note",
+        description=(
+            "Add an INTERNAL note to a ticket - visible to agents only, never "
+            "to the customer, and never delivered anywhere. Use it for "
+            "investigation notes, hand-over context, or anything you would not "
+            "want the customer to read, including files passed in "
+            "`attachments`. To write to the customer, use `reply_to_customer`."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=False,
+            destructiveHint=False,  # additive
+            idempotentHint=False,
+            openWorldHint=True,
+        ),
+    )
 
     return 5
