@@ -495,6 +495,7 @@ def _docx_bytes(*paragraphs: str) -> bytes:
 
 
 async def test_a_docx_comes_back_as_extracted_text() -> None:
+    pytest.importorskip("defusedxml")
     docx = _docx_bytes("Angebot 4711")
     mcp, _ = _build_raw(
         # Declared as octet-stream: the type is found in the bytes, not the label.
@@ -512,6 +513,7 @@ async def test_a_docx_comes_back_as_extracted_text() -> None:
 
 
 async def test_rtf_is_stripped_rather_than_returned_raw() -> None:
+    pytest.importorskip("striprtf")
     rtf = rb"{\rtf1\ansi\deff0 {\fonttbl{\f0 Arial;}}\f0 Technische Daten\par}"
     mcp, _ = _build_raw(
         [_one("daten.rtf", "application/msword", len(rtf))],

@@ -72,10 +72,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-py314-pip-
 
-      - name: ⚙️ Install (test + dev)
+      # `documents` belongs here, not only in the Dockerfile: the extraction
+      # suite exercises the real parsers, and without the extra those tests
+      # assert against the "not installed" fallback instead of the behaviour
+      # they are meant to cover.
+      - name: ⚙️ Install (test + dev + documents)
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[test,dev]"
+          pip install -e ".[test,dev,documents]"
 
       - name: 🎨 Lint (ruff)
         run: ruff check src tests

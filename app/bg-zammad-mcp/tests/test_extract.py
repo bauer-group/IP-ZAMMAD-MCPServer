@@ -19,6 +19,13 @@ from zammad import extract, media
 
 DOCX_XML_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
 
+# Tests that exercise a real parser call pytest.importorskip for the package
+# they need, the way the openpyxl and pypdf tests below already do. Without it
+# a developer who has not installed the 'documents' extra reads
+# "assert 'failed' == 'ok'" and has to work out why. CI installs the extra, so
+# there these tests always run - the skip is a courtesy, not a get-out.
+
+
 
 def _docx(document_xml: bytes) -> bytes:
     buf = io.BytesIO()
@@ -42,6 +49,7 @@ async def test_docx_with_an_entity_declaration_is_refused() -> None:
     defusedxml refuses both, at the parser rather than by inspecting bytes, so
     the guard holds wherever in the document the declaration sits and whatever
     encoding it uses."""
+    pytest.importorskip("defusedxml")
     hostile = _docx(
         b'<!DOCTYPE w:document [<!ENTITY a "AAAAAAAAAA">]>'
         b"<w:document " + DOCX_XML_NS.encode() + b"><w:body/></w:document>"
@@ -58,6 +66,7 @@ async def test_docx_with_an_entity_declaration_is_refused() -> None:
 async def test_docx_with_a_bare_dtd_is_refused_too() -> None:
     """forbid_dtd=True: OOXML never legitimately carries a DTD, so there is no
     reason to accept one even when it declares no entities."""
+    pytest.importorskip("defusedxml")
     hostile = _docx(
         b"<!DOCTYPE w:document>"
         b"<w:document " + DOCX_XML_NS.encode() + b"><w:body/></w:document>"
@@ -93,6 +102,7 @@ async def test_a_slow_parser_is_cut_off_by_the_time_budget(monkeypatch: Any) -> 
 
 
 async def test_docx_text_is_extracted_paragraph_by_paragraph() -> None:
+    pytest.importorskip("defusedxml")
     result = await extract.extract(
         _plain_docx("Erste Zeile", "Zweite Zeile"), mime_type=media.DOCX_MIME
     )
@@ -102,6 +112,7 @@ async def test_docx_text_is_extracted_paragraph_by_paragraph() -> None:
 
 
 async def test_rtf_control_words_are_stripped() -> None:
+    pytest.importorskip("striprtf")
     rtf = rb"{\rtf1\ansi\deff0 {\fonttbl{\f0 Arial;}}\f0 Technische Daten\par}"
     result = await extract.extract(rtf, mime_type="application/rtf")
     assert result.status == "ok"
@@ -142,6 +153,7 @@ async def test_pdf_text_is_extracted() -> None:
 
 
 async def test_an_empty_document_reports_partial_not_success() -> None:
+    pytest.importorskip("defusedxml")
     result = await extract.extract(_plain_docx(), mime_type=media.DOCX_MIME)
     assert result.status == "partial"
     assert result.text == ""
