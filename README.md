@@ -22,7 +22,7 @@
 | **Role-based MCP access** | `MCP_ALLOWED_ROLES=Admin,Agent` lets you say "this MCP is for staff only, never expose to Customers" as a coarse gate above Zammad's per-endpoint permissions. |
 | **Zammad 7.x** | Targets the Zammad 7 `/api/v1` surface. `get_zammad_version` reports the live patch level on demand. |
 | **36 hand-curated tools** | Tickets, articles, users, organizations, groups, tags, reference data, notifications. Auto-run safety encoded as MCP tool annotations. |
-| **Multi-arch** | `linux/amd64` and `linux/arm64` images on GHCR. |
+| **Published image** | `linux/amd64` on GHCR. ARM hosts need a local build — nothing here is architecture-specific. |
 | **Three deploy flavours** | Local development, self-hosted Traefik, Coolify-managed — same image, same source. |
 | **Test-gated builds** | The Docker multi-stage build fails if pytest fails — no green push when tests are red. |
 | **Restart-safe sessions** | Encrypted OAuth state store: Redis-backed (production) or disk-backed (single-node fallback), both Fernet-encrypted at rest. |
