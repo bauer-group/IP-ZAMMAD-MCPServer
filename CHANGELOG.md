@@ -1,3 +1,15 @@
+# Changelog
+
+All notable changes to this project are documented here. This file is maintained
+automatically by [semantic-release](https://github.com/semantic-release/semantic-release)
+on every release to `main`.
+
+## [6.0.1](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v6.0.0...v6.0.1) (2026-09-01)
+
+### 🐛 Bug Fixes
+
+* **ci:** declared amd64-only builds instead of claiming arm64 ([486a88d](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/486a88dfb7ed303ffd000ba051d614509c459d76))
+
 ## [6.0.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v5.1.0...v6.0.0) (2026-08-12)
 
 ### ⚠ BREAKING CHANGES
