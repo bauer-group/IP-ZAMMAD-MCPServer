@@ -49,6 +49,7 @@ from ..projection import trim_articles
 from ..uploads import AttachmentInput, build_attachment_payload
 from . import ToolContext
 from ._uploads_wiring import register_write_tool, uploads_enabled
+from .tickets import CONTENT_TYPE_DESCRIPTION, reject_unknown_content_type
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -177,10 +178,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
             ),
         ] = None,
         cc: Annotated[str | None, Field(description="CC recipient(s) - e-mail only")] = None,
-        content_type: Annotated[
-            str,
-            Field(description="'text/plain' (default) or 'text/html'"),
-        ] = "text/plain",
+        content_type: Annotated[str, Field(description=CONTENT_TYPE_DESCRIPTION)] = "text/plain",
         attachments: Annotated[
             list[AttachmentInput] | None,
             Field(default=None, max_length=10, description=ATTACHMENTS_DESCRIPTION),
@@ -192,6 +190,9 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 f"(got {article_type!r}). To write something the customer cannot "
                 "see, use add_internal_note."
             )
+        # Checked after article_type: getting the delivery channel wrong is the
+        # consequential mistake, so it is the one to report first.
+        reject_unknown_content_type(content_type)
         payload: dict[str, Any] = {
             "ticket_id": ticket_id,
             "body": body,
@@ -216,15 +217,13 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         ticket_id: Annotated[int, Field(ge=1)],
         body: Annotated[str, Field(min_length=1, description="The note text")],
         subject: Annotated[str | None, Field(max_length=200)] = None,
-        content_type: Annotated[
-            str,
-            Field(description="'text/plain' (default) or 'text/html'"),
-        ] = "text/plain",
+        content_type: Annotated[str, Field(description=CONTENT_TYPE_DESCRIPTION)] = "text/plain",
         attachments: Annotated[
             list[AttachmentInput] | None,
             Field(default=None, max_length=10, description=ATTACHMENTS_DESCRIPTION),
         ] = None,
     ) -> Any:
+        reject_unknown_content_type(content_type)
         payload: dict[str, Any] = {
             "ticket_id": ticket_id,
             "body": body,

@@ -109,6 +109,22 @@ search_text_modules(query="…")     # approved house wording
 search_knowledge_base(query="…")   # documented answers
 ```
 
+### Sending HTML
+
+Bodies are plain text unless you say otherwise. Zammad escapes a plain-text
+body when it renders it, so markup sent without `content_type` reaches the
+customer as literal `<p>` tags rather than as formatting:
+
+```text
+reply_to_customer(ticket_id=4711, body="<p>Guten Tag …</p>", content_type="text/html")
+```
+
+`add_internal_note`, `create_ticket`, `update_ticket` and `update_tickets` take
+the same `content_type` parameter, so the choice does not depend on which tool
+happens to be writing the article. Only `text/plain` and `text/html` are
+accepted — Zammad itself stores anything short enough without complaint, but
+its mail builder and all three of its UIs recognise only those two exactly.
+
 ---
 
 ## 4. Close a ticket with a note, in one request

@@ -194,6 +194,7 @@ async def test_article_rides_along_in_the_same_call(mcp_and_ctx) -> None:  # typ
         "body": "Closed after the maintenance window.",
         "type": "note",
         "internal": True,
+        "content_type": "text/plain",
         "subject": "Maintenance",
     }
 
@@ -258,6 +259,7 @@ async def test_a_visible_bulk_reply_is_allowed(mcp_and_ctx) -> None:  # type: ig
         "body": "We are on it.",
         "type": "email",
         "internal": False,
+        "content_type": "text/plain",
     }
 
 
@@ -299,3 +301,21 @@ async def test_other_zammad_errors_are_not_swallowed() -> None:
     bulk.register(mcp, ctx)
     with pytest.raises(Exception, match="Not authorized"):
         await _call(mcp, "update_tickets", ticket_ids=[1], state="closed")
+
+
+async def test_an_unknown_bulk_visibility_is_refused(mcp_and_ctx) -> None:  # type: ignore[no-untyped-def]
+    """update_tickets used to build its article dict itself, and that copy read
+    visibility as `article_visibility == "internal"` with no validation. Any
+    value it did not recognise was therefore False - customer_visible - so a
+    typo published what the agent meant as an internal note to every customer
+    in the batch, once per ticket. update_ticket refused the same typo."""
+    mcp, ctx = mcp_and_ctx
+    with pytest.raises(Exception, match="article_visibility must be one of"):
+        await _call(
+            mcp,
+            "update_tickets",
+            ticket_ids=[1, 2],
+            article_body="internal hand-over note",
+            article_visibility="agents_only",
+        )
+    assert ctx.calls == []

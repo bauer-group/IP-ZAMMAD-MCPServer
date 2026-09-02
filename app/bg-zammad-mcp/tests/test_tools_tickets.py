@@ -138,7 +138,12 @@ async def test_update_ticket_can_attach_a_note_atomically(ticket_tools) -> None:
     await _call(mcp, "update_ticket", ticket_id=7, state="closed", article_body="resolved")
     payload = ctx.last["json"]
     assert payload["state"] == "closed"
-    assert payload["article"] == {"body": "resolved", "type": "note", "internal": True}
+    assert payload["article"] == {
+        "body": "resolved",
+        "type": "note",
+        "internal": True,
+        "content_type": "text/plain",
+    }
 
 
 async def test_update_ticket_still_rejects_an_empty_change(ticket_tools) -> None:  # type: ignore[no-untyped-def]
@@ -300,3 +305,89 @@ async def test_replace_tags_is_named_after_what_it_does(ticket_tools) -> None:  
     # parameter's own description, not buried in the tool blurb.
     assert "add_tag" in update["replace_tags"]["description"]
     assert "REPLACES" in update["replace_tags"]["description"]
+
+
+# ── one vocabulary for article content type ──────────────────────────────────
+
+# Every tool that can author an article body, with the smallest call that
+# produces one and whether the article travels NESTED under an "article" key
+# (riding along with a ticket write) or as the payload itself.
+ARTICLE_WRITERS = (
+    (
+        "create_ticket",
+        {"title": "t", "group": "Support", "customer": "c@example.com", "article_body": "x"},
+        True,
+    ),
+    ("update_ticket", {"ticket_id": 7, "article_body": "x"}, True),
+    ("update_tickets", {"ticket_ids": [7], "article_body": "x"}, True),
+    ("reply_to_customer", {"ticket_id": 7, "body": "x"}, False),
+    ("add_internal_note", {"ticket_id": 7, "body": "x"}, False),
+)
+
+
+def _article_payload(ctx: Any, nested: bool) -> dict[str, Any]:
+    payload = ctx.last["json"]
+    return payload["article"] if nested else payload
+
+
+async def test_every_article_writing_tool_offers_the_same_content_type(write_tools) -> None:  # type: ignore[no-untyped-def]
+    """`content_type` used to exist only on the two tools whose payload IS the
+    article. The three that let an article ride along with a ticket write —
+    create_ticket, update_ticket, update_tickets — silently pinned every body
+    to Zammad's `text/plain` column default, so an HTML body came back escaped
+    as literal tags in the agent UI and in the outgoing mail."""
+    mcp, _ = write_tools
+    tools = {t.name: t for t in await mcp.list_tools(run_middleware=False)}
+    for name, _kwargs, _nested in ARTICLE_WRITERS:
+        props = (tools[name].parameters or {}).get("properties", {})
+        assert "content_type" in props, f"{name} cannot say how its body is formatted"
+
+
+@pytest.mark.parametrize(("name", "kwargs", "nested"), ARTICLE_WRITERS)
+async def test_content_type_defaults_to_plain_text(  # type: ignore[no-untyped-def]
+    write_tools, name: str, kwargs: dict[str, Any], nested: bool
+) -> None:
+    """Sent explicitly rather than left to Zammad's column default, so the
+    payload says what it means and every surface reads alike on the wire."""
+    mcp, ctx = write_tools
+    await _call(mcp, name, **kwargs)
+    assert _article_payload(ctx, nested)["content_type"] == "text/plain"
+
+
+@pytest.mark.parametrize(("name", "kwargs", "nested"), ARTICLE_WRITERS)
+async def test_html_bodies_reach_zammad_tagged_as_html(  # type: ignore[no-untyped-def]
+    write_tools, name: str, kwargs: dict[str, Any], nested: bool
+) -> None:
+    mcp, ctx = write_tools
+    await _call(mcp, name, content_type="text/html", **kwargs)
+    assert _article_payload(ctx, nested)["content_type"] == "text/html"
+
+
+@pytest.mark.parametrize(("name", "kwargs", "nested"), ARTICLE_WRITERS)
+async def test_an_unknown_content_type_is_refused(  # type: ignore[no-untyped-def]
+    write_tools, name: str, kwargs: dict[str, Any], nested: bool
+) -> None:
+    """Zammad has no whitelist and stores whatever fits in varchar(20), so a
+    typo is persisted with HTTP 201 — and is not inert: `sanitizeable?` matches
+    /html/i, so 'html' switches the sanitizer ON and 'text/markdown' switches it
+    OFF, behind the caller's back. The guard has to live here."""
+    mcp, ctx = write_tools
+    with pytest.raises(Exception, match="content_type must be one of"):
+        await _call(mcp, name, content_type="text/markdown", **kwargs)
+    assert ctx.calls == []
+
+
+@pytest.mark.parametrize(("name", "kwargs", "nested"), ARTICLE_WRITERS)
+async def test_a_charset_suffix_is_refused(  # type: ignore[no-untyped-def]
+    write_tools, name: str, kwargs: dict[str, Any], nested: bool
+) -> None:
+    """'text/html; charset=utf-8' is 24 characters against a varchar(20) column,
+    so Zammad truncates or rejects it. Worse, Zammad's DELIVERY and all three of
+    its UIs compare content_type by EXACT equality with 'text/html' (the model
+    layer's case-insensitive regex is the exception, not the rule) — as does our
+    own read path in projection.py. Only the two canonical tokens work end to
+    end, so the suffix is refused rather than silently mangled."""
+    mcp, ctx = write_tools
+    with pytest.raises(Exception, match="content_type must be one of"):
+        await _call(mcp, name, content_type="text/html; charset=utf-8", **kwargs)
+    assert ctx.calls == []

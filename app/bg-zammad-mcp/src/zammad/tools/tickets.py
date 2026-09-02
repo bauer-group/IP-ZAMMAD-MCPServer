@@ -73,16 +73,59 @@ INDEX_MAX_PER_PAGE = 100
 # the choice to be stated wherever it is available at all.
 VISIBILITY = ("customer_visible", "internal")
 
+# The only two values that work end to end. Zammad's own MODEL layer is loose
+# here - it matches content_type with case-insensitive regexes - but everything
+# that actually renders the article compares by EXACT equality against
+# 'text/html': the mail builder, all three UIs, and our own read path in
+# projection.py. On top of that the column is varchar(20), so a value carrying a
+# charset ('text/html; charset=utf-8', 24 chars) is truncated rather than
+# refused. Zammad validates none of this - an unknown value is stored with HTTP
+# 201 and silently flips behaviour, because `sanitizeable?` matches /html/i:
+# 'html' switches the HTML sanitizer ON, 'text/markdown' switches it OFF. So the
+# guard belongs here, and it has to be exact rather than merely plausible.
+CONTENT_TYPES = ("text/plain", "text/html")
 
-def _article(body: str, visibility: str, article_type: str = "note") -> dict[str, Any]:
-    """Build a ticket-article payload from the shared visibility vocabulary."""
+CONTENT_TYPE_DESCRIPTION = (
+    "How the body is formatted: 'text/plain' (default) or 'text/html'. Zammad "
+    "escapes a plain-text body when it renders it, so HTML markup sent without "
+    "'text/html' reaches the customer as literal tags."
+)
+
+
+def reject_unknown_content_type(content_type: str) -> None:
+    """Guard the article content type on every surface that can author a body."""
+    if content_type not in CONTENT_TYPES:
+        raise ToolError(
+            f"content_type must be one of {', '.join(CONTENT_TYPES)} "
+            f"(got {content_type!r}). Zammad stores anything that fits in 20 "
+            "characters without complaint, so a near-miss like 'html' or "
+            "'text/html; charset=utf-8' would be accepted and then rendered "
+            "wrongly."
+        )
+
+
+def build_article(
+    body: str,
+    visibility: str,
+    article_type: str = "note",
+    content_type: str = "text/plain",
+) -> dict[str, Any]:
+    """Build a ticket-article payload from the shared article vocabulary."""
     if visibility not in VISIBILITY:
         raise ToolError(
             f"article_visibility must be one of {', '.join(VISIBILITY)} "
             f"(got {visibility!r}). 'customer_visible' is what the customer reads; "
             "'internal' is agents-only."
         )
-    return {"body": body, "type": article_type, "internal": visibility == "internal"}
+    reject_unknown_content_type(content_type)
+    return {
+        "body": body,
+        "type": article_type,
+        "internal": visibility == "internal",
+        # Sent explicitly even when it matches Zammad's column default, so that
+        # all five article-writing surfaces put the same thing on the wire.
+        "content_type": content_type,
+    }
 
 
 def reject_name_and_id_conflicts(**pairs: Any) -> None:
@@ -403,6 +446,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 )
             ),
         ] = "customer_visible",
+        content_type: Annotated[str, Field(description=CONTENT_TYPE_DESCRIPTION)] = "text/plain",
         group_id: Annotated[
             int | None, Field(ge=1, description="Group by ID, instead of `group`")
         ] = None,
@@ -472,7 +516,9 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         payload: dict[str, Any] = dict(extra_fields or {})
         payload |= {
             "title": title,
-            "article": _article(article_body, article_visibility, article_type),
+            "article": build_article(
+                article_body, article_visibility, article_type, content_type
+            ),
         }
         # Zammad resolves `group`/`customer` by name and `*_id` by id, and the
         # _id form wins when both are present (CanAssociations). Send only what
@@ -617,6 +663,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 )
             ),
         ] = "internal",
+        content_type: Annotated[str, Field(description=CONTENT_TYPE_DESCRIPTION)] = "text/plain",
         extra_fields: Annotated[
             dict[str, Any] | None,
             Field(
@@ -673,7 +720,9 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         if replace_tags is not None:
             payload["tags"] = replace_tags
         if article_body is not None:
-            payload["article"] = _article(article_body, article_visibility)
+            payload["article"] = build_article(
+                article_body, article_visibility, content_type=content_type
+            )
         if not payload:
             raise ToolError(
                 "update_ticket needs at least one field to change. Pass e.g. "

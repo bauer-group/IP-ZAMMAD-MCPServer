@@ -48,7 +48,7 @@ from pydantic import Field
 
 from ..errors import ZammadValidationError
 from . import ToolContext
-from .tickets import reject_name_and_id_conflicts
+from .tickets import CONTENT_TYPE_DESCRIPTION, build_article, reject_name_and_id_conflicts
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -167,6 +167,7 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
                 )
             ),
         ] = "internal",
+        content_type: Annotated[str, Field(description=CONTENT_TYPE_DESCRIPTION)] = "text/plain",
         article_subject: Annotated[str | None, Field(max_length=200)] = None,
     ) -> Any:
         if len(ticket_ids) > MAX_BULK_TICKETS:
@@ -236,11 +237,14 @@ def register(mcp: FastMCP, ctx: ToolContext) -> int:
         if attributes:
             payload["attributes"] = attributes
         if article_body is not None:
-            article: dict[str, Any] = {
-                "body": article_body,
-                "type": article_type,
-                "internal": article_visibility == "internal",
-            }
+            # Built by the shared helper rather than assembled here. The local
+            # copy silently mapped an UNKNOWN article_visibility to
+            # customer_visible - `visibility == "internal"` is False for
+            # anything it does not recognise - so a typo published an agent-only
+            # message to every customer in the batch.
+            article = build_article(
+                article_body, article_visibility, article_type, content_type
+            )
             if article_subject is not None:
                 article["subject"] = article_subject
             payload["article"] = article
