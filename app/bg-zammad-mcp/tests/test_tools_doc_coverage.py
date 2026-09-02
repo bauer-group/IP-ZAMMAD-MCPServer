@@ -26,7 +26,24 @@ from fastmcp import FastMCP
 
 APP = Path(__file__).resolve().parents[1]
 PROFILE = APP / "src" / "profiles" / "zammad.json"
-TOOLS_DOC = APP.parents[1] / "docs" / "tools.md"
+
+
+def _find_tools_doc() -> Path | None:
+    """Locate docs/tools.md by walking up, or None when it is not in the tree.
+
+    Searched rather than computed from a fixed depth: the image's test stage
+    copies tests/ to /app/tests, where the repository's `parents[1]` does not
+    exist. Indexing it raised at import time — before the skip below could run,
+    which is exactly the case that skip was written for.
+    """
+    for base in (APP, *APP.parents):
+        candidate = base / "docs" / "tools.md"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+TOOLS_DOC = _find_tools_doc()
 
 
 class _NullCtx:
@@ -63,7 +80,7 @@ async def _published_tool_names() -> set[str]:
 
 @pytest.fixture(scope="module")
 def tools_doc() -> str:
-    if not TOOLS_DOC.is_file():
+    if TOOLS_DOC is None:
         # The image's test stage copies src/, tests/ and extensions/ but not
         # docs/, so this cannot run from inside the build. It still gates every
         # push: CI and any local run work from a full checkout.
