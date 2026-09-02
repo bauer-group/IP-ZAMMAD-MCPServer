@@ -4,8 +4,9 @@
 The tool catalogue was documented by hand and drifted immediately: four
 different counts appeared across the docs (33, ~33, ~36, 36) while
 `docs/tools.md` was linked from the spec but had never existed. A hand-written
-inventory of 75 tools is guaranteed to be wrong within a release, so this
-derives it from the same `server.register()` the running server uses.
+inventory of 77 tools is guaranteed to be wrong within a release, so this
+derives it from the same profile the running server boots from — both of its
+tool sources, not just this repository's half.
 
     python scripts/generate-tools-doc.py            # write docs/tools.md
     python scripts/generate-tools-doc.py --check    # fail if stale (CI)
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,6 +24,7 @@ from typing import Any
 REPO = Path(__file__).resolve().parent.parent
 APP = REPO / "app" / "bg-zammad-mcp"
 OUT = REPO / "docs" / "tools.md"
+PROFILE = APP / "src" / "profiles" / "zammad.json"
 
 HEADER = """# Tool reference
 
@@ -40,6 +43,7 @@ Annotation legend:
 | --- | --- |
 | **read** | `readOnlyHint` — safe to auto-run; changes nothing. |
 | **write** | Additive, or affects only the caller's own reversible state. |
+| **unannotated** | Declares no hints at all. Shipped by the shared framework rather than by this server, so treat it as unclassified rather than safe. |
 | **destructive** | `destructiveHint` — overwrites or removes state others rely on. An MCP client should ask a human first. |
 """
 
@@ -48,16 +52,23 @@ class _NullCtx:
     """Registration only — no tool is executed here."""
 
     settings = None
+    client = None
 
     async def request(self, *args: Any, **kwargs: Any) -> Any:  # pragma: no cover
         raise RuntimeError("generate-tools-doc must not perform requests")
 
 
 def _kind(tool: Any) -> str:
+    # A missing annotation block used to fall through to "write". That was a
+    # safe default while every documented tool came from this repository and
+    # carried one, but the registry tools carry none, and reporting a claim a
+    # tool never made is worse than reporting the gap.
     annotations = tool.annotations
-    if annotations is not None and annotations.readOnlyHint:
+    if annotations is None:
+        return "unannotated"
+    if annotations.readOnlyHint:
         return "read"
-    if annotations is not None and annotations.destructiveHint:
+    if annotations.destructiveHint:
         return "destructive"
     return "write"
 
@@ -77,10 +88,24 @@ async def _render() -> str:
     sys.path.insert(0, str(APP / "src"))
     import server  # noqa: PLC0415
 
+    from bg_mcpcore.tools.registry import get_tool  # noqa: PLC0415
     from fastmcp import FastMCP  # noqa: PLC0415
 
+    # Walk the profile rather than calling server.register() alone: that is only
+    # the first of the two sources the profile declares, and the second one -
+    # bg.ping and bg.health out of the shared registry - reaches every client.
+    # Documenting half the surface is how a page headed "every tool" came to
+    # omit two of them.
     mcp: FastMCP = FastMCP("doc-generator")
-    total = server.register(mcp, _NullCtx())
+    ctx = _NullCtx()
+    for source in json.loads(PROFILE.read_text(encoding="utf-8"))["tools"]:
+        if source["source"] == "python":
+            server.register(mcp, ctx)
+        elif source["source"] == "registry":
+            for name in source["include"]:
+                get_tool(name)(mcp, ctx)
+        else:
+            raise SystemExit(f"unhandled profile tool source: {source['source']!r}")
     tools = sorted(await mcp.list_tools(run_middleware=False), key=lambda t: t.name)
 
     # Group by the tag that best describes the tool, preferring the more
@@ -121,13 +146,12 @@ async def _render() -> str:
         sections.append("")
 
     counts = {
-        "read": sum(1 for t in tools if _kind(t) == "read"),
-        "write": sum(1 for t in tools if _kind(t) == "write"),
-        "destructive": sum(1 for t in tools if _kind(t) == "destructive"),
+        kind: sum(1 for t in tools if _kind(t) == kind)
+        for kind in ("read", "write", "destructive", "unannotated")
     }
     summary = (
-        f"\n**{total} tools** — {counts['read']} read-only, {counts['write']} additive writes, "
-        f"{counts['destructive']} destructive.\n"
+        f"\n**{len(tools)} tools** — {counts['read']} read-only, {counts['write']} additive writes, "
+        f"{counts['destructive']} destructive, {counts['unannotated']} unannotated.\n"
     )
     return HEADER + summary + "\n".join(sections)
 

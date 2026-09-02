@@ -15,9 +15,10 @@ Annotation legend:
 | --- | --- |
 | **read** | `readOnlyHint` — safe to auto-run; changes nothing. |
 | **write** | Additive, or affects only the caller's own reversible state. |
+| **unannotated** | Declares no hints at all. Shipped by the shared framework rather than by this server, so treat it as unclassified rather than safe. |
 | **destructive** | `destructiveHint` — overwrites or removes state others rely on. An MCP client should ask a human first. |
 
-**75 tools** — 45 read-only, 16 additive writes, 14 destructive.
+**77 tools** — 45 read-only, 16 additive writes, 14 destructive, 2 unannotated.
 
 ## Worklist
 
@@ -146,3 +147,11 @@ Annotation legend:
 | `list_ticket_fields` | read | Discover which fields a ticket has in THIS Zammad instance, including the custom Object-Manager attributes almost every production instance adds - nothing else on this server reveals them. |
 | `list_ticket_priorities` | read | List all ticket priorities defined in this Zammad instance (typically 1 low, 2 normal, 3 high). |
 | `list_ticket_states` | read | List all ticket states defined in this Zammad instance (open, closed, pending reminder, pending close, ...). |
+
+
+## Other
+
+| Tool | | What it does |
+| --- | --- | --- |
+| `ping` | unannotated | Return 'pong'. |
+| `upstream_health` | unannotated | Report whether the upstream REST API behind this server is reachable. |

@@ -258,7 +258,7 @@ add the one new value.
 
 ## 5.1.0
 
-The attachment surface. No new tools — the count stays at 75 — but
+The attachment surface. No new tools — the surface stays at 77 — but
 `download_ticket_attachment` stopped being text-only, the three article-creating
 tools learned to send files, and the limits on both directions became settings.
 Everything is additive: an existing call keeps working.
