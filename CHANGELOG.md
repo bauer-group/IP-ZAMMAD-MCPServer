@@ -4,6 +4,12 @@ All notable changes to this project are documented here. This file is maintained
 automatically by [semantic-release](https://github.com/semantic-release/semantic-release)
 on every release to `main`.
 
+## [6.1.0](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v6.0.1...v6.1.0) (2026-09-02)
+
+### 🚀 Features
+
+* **tools:** added content_type to every article-writing tool ([5ddd3c9](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/5ddd3c918c2927b92fd5d99ffb2b7ed1e28be021))
+
 ## [6.0.1](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v6.0.0...v6.0.1) (2026-09-01)
 
 ### 🐛 Bug Fixes
