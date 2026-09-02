@@ -4,6 +4,12 @@ All notable changes to this project are documented here. This file is maintained
 automatically by [semantic-release](https://github.com/semantic-release/semantic-release)
 on every release to `main`.
 
+## [6.1.2](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v6.1.1...v6.1.2) (2026-09-02)
+
+### 🐛 Bug Fixes
+
+* **tests:** stopped the doc-coverage test breaking the image build ([e694f5e](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/e694f5e1f31bd2832663a42d11b308669c20fdc1))
+
 ## [6.1.1](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v6.1.0...v6.1.1) (2026-09-02)
 
 ### 🐛 Bug Fixes
