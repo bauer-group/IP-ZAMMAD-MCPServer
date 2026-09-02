@@ -22,7 +22,6 @@ import os
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 
 DEFAULT_URL = "http://localhost:8000/mcp"
 

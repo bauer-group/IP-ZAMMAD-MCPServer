@@ -33,6 +33,7 @@ Exit codes
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import re
 import secrets
@@ -40,7 +41,6 @@ import shutil
 import stat
 import sys
 from pathlib import Path
-
 
 # --- Configuration -----------------------------------------------------------
 
@@ -286,10 +286,11 @@ def main(argv: list[str] | None = None) -> int:
 
 def reconfigure_stdout_utf8() -> None:
     for stream in (sys.stdout, sys.stderr):
-        try:
+        # A stream that cannot be reconfigured (a pipe, a captured buffer, an
+        # older object without the method) is not a problem worth reporting —
+        # the script's output is merely less pretty.
+        with contextlib.suppress(AttributeError, OSError):
             stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
-        except (AttributeError, OSError):
-            pass
 
 
 if __name__ == "__main__":

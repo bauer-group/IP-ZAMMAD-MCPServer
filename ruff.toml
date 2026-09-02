@@ -1,0 +1,16 @@
+# Lint settings for the repo-root Python that is not part of the server package:
+# everything under scripts/. The server itself is governed by
+# app/bg-zammad-mcp/pyproject.toml, which ruff picks up instead for any file
+# beneath it — the nearest config wins, so these two never fight.
+#
+# The rules are deliberately the same as the package's. A helper script that
+# writes .env files or generates a documentation gate is not throwaway code, and
+# holding it to a second, looser standard is how it drifts: this file exists
+# because scripts/ had accumulated findings that no gate was looking for.
+
+target-version = "py314"
+line-length = 100
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["E501"]

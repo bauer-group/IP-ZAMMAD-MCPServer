@@ -85,11 +85,13 @@ def _first_sentence(text: str | None) -> str:
 
 
 async def _render() -> str:
+    # Imported here rather than at module scope: `server` is only importable
+    # after the sys.path line above, and importing it at all pulls in the whole
+    # tool surface, which an `--help` run has no use for.
     sys.path.insert(0, str(APP / "src"))
-    import server  # noqa: PLC0415
-
-    from bg_mcpcore.tools.registry import get_tool  # noqa: PLC0415
-    from fastmcp import FastMCP  # noqa: PLC0415
+    import server
+    from bg_mcpcore.tools.registry import get_tool
+    from fastmcp import FastMCP
 
     # Walk the profile rather than calling server.register() alone: that is only
     # the first of the two sources the profile declares, and the second one -
