@@ -1,10 +1,25 @@
 # =============================================================================
-# Docker Maintenance — Auto-merge Dependabot PRs (bg-zammad-mcp Dockerfile)
+# Docker Maintenance — Auto-merge Dependabot PRs
 # =============================================================================
-# When Dependabot opens a PR bumping the python:3.14-alpine base image inside
-# app/bg-zammad-mcp/Dockerfile, this workflow auto-approves and merges it
-# (after validation passes), which then triggers docker-release.yml to build
-# and push the updated image.
+# Every Dependabot PR reaches this workflow (no `paths:` filter), so each one
+# gets an explicit decision and annotation instead of silently staying open:
+#
+#   docker          app/bg-zammad-mcp/Dockerfile base image
+#   pip             app/bg-zammad-mcp/pyproject.toml
+#                   Both live under app/**, so docker-release.yml runs on the
+#                   PR: the Python gate (tests.yml) and the image build with
+#                   its in-image test stage. A patch update is merged once
+#                   that run passed; minor and major updates stay open.
+#   docker-compose  docker-compose*.yml image tags. docker-release.yml runs
+#                   on them but only validates the files - nothing starts the
+#                   stack, so these are not tested. The tags are floating
+#                   (redis 8-alpine, own image latest): Dependabot can only
+#                   propose a major, which stays open. Keep them floating.
+#   github-actions  Never merged automatically - a CI change (module guard).
+#
+# A merged update triggers no release by itself: the merge is made with the
+# GITHUB_TOKEN, so docker-release.yml runs with the next push to main or when
+# it is started by hand.
 # =============================================================================
 
 name: 🔧 Docker Maintenance
@@ -12,8 +27,6 @@ name: 🔧 Docker Maintenance
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - 'app/bg-zammad-mcp/Dockerfile'
 
 permissions:
   contents: write
