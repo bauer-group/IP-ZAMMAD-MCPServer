@@ -4,6 +4,12 @@ All notable changes to this project are documented here. This file is maintained
 automatically by [semantic-release](https://github.com/semantic-release/semantic-release)
 on every release to `main`.
 
+## [6.1.7](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v6.1.6...v6.1.7) (2026-10-27)
+
+### 🔧 Maintenance
+
+* **deps:** update base image python-alpine [skip ci] ([eb91b04](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/eb91b0469589dbd966eef140cf5d7cc0bbda4dda))
+
 ## [6.1.6](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v6.1.5...v6.1.6) (2026-10-22)
 
 ### 🔧 Maintenance
