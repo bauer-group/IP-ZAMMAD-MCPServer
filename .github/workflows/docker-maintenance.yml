@@ -8,8 +8,9 @@
 #   pip             app/bg-zammad-mcp/pyproject.toml
 #                   Both live under app/**, so docker-release.yml runs on the
 #                   PR: the Python gate (tests.yml) and the image build with
-#                   its in-image test stage. A patch update is merged once
-#                   that run passed; minor and major updates stay open.
+#                   its in-image test stage. A patch or minor update is
+#                   merged once that run passed; major updates (a 0.x
+#                   minor counts as major) stay open.
 #   docker-compose  docker-compose*.yml image tags. docker-release.yml runs
 #                   on them but only validates the files - nothing starts the
 #                   stack, so these are not tested. The tags are floating
