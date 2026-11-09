@@ -18,7 +18,14 @@
 #   and cut their own patch: the base image (3) and the Python deps (4). The
 #   two that do not are deliberately left on `chore(...)`: GitHub Actions (1)
 #   never enters the build context, and the compose files (2) describe how the
-#   image is deployed, not what it contains.
+#   image is deployed, not what it contains. Python dependencies Dependabot
+#   classes as development use `chore(deps-dev)` and release nothing either.
+#
+#   The commit prefix decides whether a merged update is released: fix(...)
+#   cuts a PATCH release and rebuilds the image, chore(...) releases nothing.
+#   docker-maintenance.yml merges with the GITHUB_TOKEN, which starts no push
+#   workflow, and therefore dispatches docker-release.yml itself after the
+#   merge - so a merged fix(...) update is released right away.
 # =============================================================================
 
 version: 2
@@ -86,3 +93,4 @@ updates:
       # fix(...) — these packages are installed into the image, so an update
       # that never triggers a build is an update that never ships.
       prefix: "fix(deps)"
+      prefix-development: "chore(deps-dev)"
