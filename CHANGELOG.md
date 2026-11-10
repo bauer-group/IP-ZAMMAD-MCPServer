@@ -4,6 +4,12 @@ All notable changes to this project are documented here. This file is maintained
 automatically by [semantic-release](https://github.com/semantic-release/semantic-release)
 on every release to `main`.
 
+## [6.1.9](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v6.1.8...v6.1.9) (2026-11-10)
+
+### 🐛 Bug Fixes
+
+* **docker:** bump python in /app/bg-zammad-mcp ([#9](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/issues/9)) ([df1b29f](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/commit/df1b29fdf6916ab00ae0857eb6751d2bfdf8c602))
+
 ## [6.1.8](https://github.com/bauer-group/IP-ZAMMAD-MCPServer/compare/v6.1.7...v6.1.8) (2026-11-06)
 
 ### 🔧 Maintenance
