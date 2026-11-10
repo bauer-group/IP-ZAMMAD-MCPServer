@@ -13,7 +13,7 @@
 # =============================================================================
 
 # ── Stage 1: Builder — install Python dependencies into a relocatable prefix ──
-FROM python:3.14-alpine AS builder
+FROM python:3.15-alpine AS builder
 
 # git is required to install bg-mcpcore from GitHub (a direct git ref on @main,
 # so this resolves at BUILD time rather than at commit time).
@@ -33,7 +33,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 # ── Stage 2: Test — lint, type-check and test; the build fails on any of them ─
 # `pytest` alone used to run here WITHOUT --cov, so the fail_under threshold
 # declared in pyproject never fired and the stage exited 0 at 33% coverage.
-FROM python:3.14-alpine AS test
+FROM python:3.15-alpine AS test
 
 RUN apk add --no-cache build-base libffi-dev git
 
@@ -67,7 +67,7 @@ RUN env -i HOME="$HOME" PATH="$PATH" PYTHONPATH="$PYTHONPATH" \
 
 
 # ── Stage 3: Production — minimal runtime image ──────────────────────────────
-FROM python:3.14-alpine AS production
+FROM python:3.15-alpine AS production
 
 # ── OCI / BAUER GROUP labels ────────────────────────────────────────────────
 LABEL vendor="BAUER GROUP"
