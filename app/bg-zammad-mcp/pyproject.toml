@@ -70,7 +70,7 @@ dependencies = [
 # DOCX is read with the standard library instead - see
 # docs/adr/0001-attachment-decoding-safety.md.
 documents = [
-    "pypdf>=5.1.0,<7.0.0",
+    "pypdf>=5.1.0,<8.0.0",
     "openpyxl>=3.1.5,<4.0.0",
     "striprtf>=0.0.29,<1.0.0",
     # Refuses DTDs and entity declarations at the PARSER, so the guard holds
